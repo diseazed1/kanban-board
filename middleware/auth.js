@@ -2,23 +2,36 @@
  * middleware/auth.js
  *
  * Shared authentication and authorisation middleware.
- * Uses server-side sessions (express-session + connect-pg-simple).
+ * Imported by server.mjs and referenced by route modules.
  */
+
+import jwt from 'jsonwebtoken';
 
 // Role hierarchy: higher number = more privilege
 const ROLE_LEVEL = { admin: 3, user: 2, viewer: 1 };
 
 // ---------------------------------------------------------------------------
-// authenticate — verify that the user has a valid session
+// authenticate — verify JWT from httpOnly cookie or Authorization header
 // ---------------------------------------------------------------------------
 export const authenticate = (req, res, next) => {
-    if (!req.session || !req.session.user) {
+    const token =
+        req.cookies?.token ||
+        req.headers.authorization?.replace(/^Bearer\s+/i, '');
+
+    if (!token) {
         return res.status(401).json({ error: 'Authentication required' });
     }
 
-    // Attach user to req for downstream handlers
-    req.user = req.session.user;
-    next();
+    try {
+        req.user = jwt.verify(token, process.env.JWT_SECRET);
+        next();
+    } catch (err) {
+        // Distinguish expired tokens so the client can prompt re-login
+        if (err.name === 'TokenExpiredError') {
+            return res.status(401).json({ error: 'Session expired — please log in again' });
+        }
+        return res.status(401).json({ error: 'Invalid token' });
+    }
 };
 
 // ---------------------------------------------------------------------------
