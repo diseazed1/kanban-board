@@ -276,7 +276,6 @@ async function loadUsers() {
             <td>
                 ${u.id !== currentUser.id ? `
                     <button class="btn btn-warning save-role-btn" data-user-id="${u.id}">Save Role</button>
-                    <button class="btn btn-primary reset-pw-btn" data-user-id="${u.id}" data-username="${escapeHtml(u.username)}">Reset PW</button>
                     <button class="btn ${u.is_active ? 'btn-secondary' : 'btn-success'} toggle-status-btn"
                             data-user-id="${u.id}" data-active="${u.is_active}">
                         ${u.is_active ? 'Deactivate' : 'Activate'}
@@ -284,7 +283,7 @@ async function loadUsers() {
                     <button class="btn btn-danger delete-user-btn" data-user-id="${u.id}" data-username="${escapeHtml(u.username)}">
                         Delete
                     </button>
-                ` : '<em style="color:#7f8c8d;font-size:0.8rem;">(you)</em>'
+                ` : '<em style="color:#7f8c8d;font-size:0.8rem;">(you)</em>'}
             </td>
         </tr>
     `).join('');
@@ -328,26 +327,6 @@ async function loadUsers() {
                 await api('DELETE', `/api/admin/users/${userId}`);
                 showAlert('user-alert', `User "${username}" deleted.`, 'success');
                 await loadUsers();
-            } catch (err) {
-                showAlert('user-alert', err.message);
-            }
-        });
-    });
-
-    // Reset Password buttons
-    tbody.querySelectorAll('.reset-pw-btn').forEach(btn => {
-        btn.addEventListener('click', async () => {
-            const userId   = parseInt(btn.dataset.userId, 10);
-            const username = btn.dataset.username;
-            const newPw    = prompt(`Enter a new password for user "${username}" (min 8 characters):`);
-            if (!newPw) return;
-            if (newPw.length < 8) {
-                showAlert('user-alert', 'Password must be at least 8 characters.');
-                return;
-            }
-            try {
-                await api('POST', `/api/admin/users/${userId}/reset-password`, { new_password: newPw });
-                showAlert('user-alert', `Password reset successfully for "${username}".`, 'success');
             } catch (err) {
                 showAlert('user-alert', err.message);
             }
