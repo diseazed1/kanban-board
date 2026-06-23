@@ -6,12 +6,9 @@
 FROM node:20-alpine AS deps
 WORKDIR /app
 
-COPY package.json ./
-
-# Install only production dependencies
-# Using `npm install --omit=dev` instead of `npm ci` because no lockfile is committed.
-# For deterministic builds, commit package-lock.json and switch to `npm ci --omit=dev`.
-RUN npm install --omit=dev
+COPY package*.json ./
+# Install only production dependencies; skip devDependencies
+RUN npm ci --omit=dev
 
 # ---- Stage 2: Runtime image --------------------------------------------------
 FROM node:20-alpine AS runtime

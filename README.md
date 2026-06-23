@@ -1,212 +1,89 @@
-# Kanban Board
+# Kanban Board (Improved)
 
-A collaborative Kanban board application with admin-managed user accounts, per-card publish/visibility controls, and invite-only registration via SendGrid.
+A full-stack Kanban board application built with Express, PostgreSQL, and native HTML/JS. Features robust Argon2id authentication, role-based access control, per-card visibility toggles, and invite-only registration via SendGrid.
 
 ## Features
 
-- **Server-side sessions** stored in PostgreSQL (reliable behind Fly.io reverse proxy)
-- **Admin dashboard** for user management (create, deactivate, delete, change roles, reset passwords)
-- **Invite-only registration** with SendGrid email delivery
-- **Per-card visibility toggle** — users choose whether each card is published (visible to all) or private
-- **Self-service password change** for all authenticated users
-- **Drag-and-drop** card movement between columns
-- **WIP limits** per column with visual indicators
-- **Audit log** tracking all significant actions
-- **Rate limiting** on login to prevent brute-force attacks
-- **Helmet security headers** and input validation throughout
+- **Authentication & Security:** Secure JWT cookies, Argon2id password hashing, Helmet security headers, and rate limiting.
+- **Admin Dashboard:** Oversee users, manage roles (Admin, User, Viewer), view audit logs, and send email invitations.
+- **Publish/Visibility Controls:** Cards can be marked as "Public" (visible to everyone) or "Private" (visible only to the owner, assignee, and admins).
+- **Invite-Only Registration:** New users must be invited by an admin via a SendGrid email containing a secure token.
+- **Fly.io Ready:** Optimized `fly.toml`, Dockerfile, and GitHub Actions CI/CD workflow.
 
-## Tech Stack
+## Local Development
 
-| Component        | Technology                            |
-|------------------|---------------------------------------|
-| Runtime          | Node.js 20+ (ES Modules)             |
-| Framework        | Express 4                             |
-| Database         | PostgreSQL                            |
-| Sessions         | express-session + connect-pg-simple   |
-| Password hashing | Argon2id (OWASP recommended)          |
-| Email            | SendGrid (@sendgrid/mail)             |
-| Deployment       | Fly.io (Docker)                       |
-| CI/CD            | GitHub Actions                        |
+### 1. Prerequisites
+- Node.js v20+
+- PostgreSQL 15+
 
-## Local Development Setup
-
-### Prerequisites
-
-- Node.js 20+
-- PostgreSQL 14+
-- A SendGrid account with a verified sender
-
-### Steps
-
+### 2. Environment Setup
+Copy the example environment file and configure it:
 ```bash
-# 1. Clone the repository
-git clone https://github.com/diseazed1/kanban-board.git
-cd kanban-board
-
-# 2. Install dependencies
-npm install
-
-# 3. Create the database and apply schema
-createdb kanban
-psql kanban -f schema.sql
-
-# 4. Configure environment variables
 cp .env.example .env
-# Edit .env — you MUST set: DATABASE_URL, SESSION_SECRET, SENDGRID_API_KEY, FROM_EMAIL
+```
+Ensure you set `DATABASE_URL`, `JWT_SECRET`, `SENDGRID_API_KEY`, and `FROM_EMAIL`.
 
-# 5. Create the first admin user (also seeds default board columns automatically)
-node seed_admin.js admin admin@example.com "YourSecurePassword123"
+### 3. Database Initialization
+Run the schema script to set up tables and types:
+```bash
+npm run db:schema
+```
 
-# 6. Start the server
+### 4. Create the First Admin
+Bootstrap your first admin account (this does not require an email invite):
+```bash
+npm run seed-admin admin admin@example.com "S3cur3P@ssw0rd!"
+```
+
+*(Optional)* Seed default columns:
+```bash
+npm run db:seed-columns
+```
+
+### 5. Start the Server
+```bash
+npm install
 npm run dev
 ```
+The application will be available at `http://localhost:3000`.
 
-The app will be running at `http://localhost:3000`.
+## Deployment (Fly.io)
 
-## Environment Variables
+This project is configured for automated deployment to Fly.io via GitHub Actions.
 
-| Variable           | Required | Description                                              |
-|--------------------|----------|----------------------------------------------------------|
-| `DATABASE_URL`     | Yes      | PostgreSQL connection string                             |
-| `SESSION_SECRET`   | Yes      | Random string (min 32 chars) for signing session cookies |
-| `SENDGRID_API_KEY` | Yes      | SendGrid API key for sending invite emails               |
-| `FROM_EMAIL`       | Yes      | Verified sender email in SendGrid                        |
-| `APP_URL`          | No       | Public app URL for invite links (defaults to localhost)  |
-| `APP_NAME`         | No       | Name shown in invite emails (defaults to "Kanban Board") |
-| `PORT`             | No       | Server port (defaults to 3000; Fly.io sets this)         |
-| `NODE_ENV`         | No       | Set to `production` on Fly.io                            |
-
-## Deployment to Fly.io
-
-### First-time setup
-
+### 1. Initial Fly Setup
+Create the app and attach a PostgreSQL cluster:
 ```bash
-# 1. Install the Fly CLI
-curl -L https://fly.io/install.sh | sh
-
-# 2. Log in
-fly auth login
-
-# 3. Launch the app (uses existing fly.toml)
-fly launch --no-deploy
-
-# 4. Create a PostgreSQL database
-fly postgres create --name kanban-db
-fly postgres attach kanban-db
-
-# 5. Set all required secrets
-fly secrets set \
-  SESSION_SECRET="$(node -e "console.log(require('crypto').randomBytes(48).toString('hex'))")" \
-  SENDGRID_API_KEY="SG.your-key-here" \
-  FROM_EMAIL="noreply@yourdomain.com" \
-  APP_URL="https://your-app-name.fly.dev"
-
-# 6. Deploy
-fly deploy
-
-# 7. Apply database schema (from inside the deployed machine)
-fly ssh console -C "node -e \"
-  const pg = require('pg');
-  const fs = require('fs');
-  const pool = new pg.Pool({connectionString: process.env.DATABASE_URL});
-  pool.query(fs.readFileSync('schema.sql','utf8')).then(() => {
-    console.log('Schema applied');
-    pool.end();
-  });
-\""
-
-# 8. Create the first admin user (also seeds default columns)
-fly ssh console -C "node seed_admin.js admin admin@example.com 'YourSecurePassword123'"
+flyctl launch --no-deploy
+flyctl postgres create
+flyctl postgres attach <db-app-name> --app <your-app-name>
 ```
 
-### Subsequent deployments
-
-Push to the `main` branch — GitHub Actions will deploy automatically via `.github/workflows/deploy.yml`.
-
-## Authentication Flow
-
-This application uses **server-side sessions** stored in PostgreSQL:
-
-1. User submits username + password to `POST /api/auth/login`
-2. Server verifies credentials with Argon2id
-3. Server creates a session in the `user_sessions` table (auto-created by connect-pg-simple)
-4. A session cookie (`kanban.sid`) is set with `httpOnly`, `sameSite: lax`, and `secure: true` in production
-5. All subsequent requests include the cookie automatically (same-origin, no CORS needed)
-6. The `authenticate` middleware checks `req.session.user` on protected routes
-
-This approach is more reliable than JWT cookies behind reverse proxies because:
-- No CORS origin matching is required (same-origin requests from static files)
-- `sameSite: lax` works correctly with Fly.io's HTTPS proxy
-- `trust proxy` is enabled so Express correctly detects HTTPS connections
-- Session state is stored server-side, so logout truly invalidates the session
-- No token expiry edge cases — the session simply exists or it does not
-
-## API Endpoints
-
-### Authentication (`/api/auth`)
-
-| Method | Path               | Auth Required | Description                   |
-|--------|--------------------|---------------|-------------------------------|
-| POST   | `/login`           | No            | Log in with username/password |
-| POST   | `/register`        | No            | Register with invite token    |
-| POST   | `/logout`          | No            | Destroy session               |
-| GET    | `/me`              | Yes           | Get current user profile      |
-| POST   | `/change-password` | Yes           | Change own password           |
-
-### Columns (`/api/columns`)
-
-| Method | Path    | Auth Required | Description       |
-|--------|---------|---------------|-------------------|
-| GET    | `/`     | Yes           | List all columns  |
-| POST   | `/`     | Admin         | Create a column   |
-| PUT    | `/:id`  | Admin         | Update a column   |
-| DELETE | `/:id`  | Admin         | Delete a column   |
-
-### Cards (`/api/cards`)
-
-| Method | Path    | Auth Required | Description       |
-|--------|---------|---------------|-------------------|
-| GET    | `/`     | Yes           | List visible cards|
-| POST   | `/`     | Yes           | Create a card     |
-| PUT    | `/:id`  | Yes (owner)   | Update a card     |
-| DELETE | `/:id`  | Yes (owner)   | Delete a card     |
-
-### Admin (`/api/admin`)
-
-| Method | Path                        | Auth Required | Description                |
-|--------|-----------------------------|---------------|----------------------------|
-| GET    | `/users`                    | Admin         | List all users             |
-| PUT    | `/users/:id`                | Admin         | Update user role/status    |
-| POST   | `/users/:id/reset-password` | Admin         | Force-reset user password  |
-| DELETE | `/users/:id`                | Admin         | Delete a user              |
-| GET    | `/invites`                  | Admin         | List pending invites       |
-| POST   | `/invites/send`             | Admin         | Send invite email          |
-| DELETE | `/invites/:token`           | Admin         | Revoke an invite           |
-| GET    | `/audit-log`                | Admin         | View paginated audit log   |
-
-## Troubleshooting
-
-### Login not working on Fly.io
-
-1. **Verify secrets are set:** `fly secrets list` — you must see `DATABASE_URL`, `SESSION_SECRET`, `SENDGRID_API_KEY`, `FROM_EMAIL`
-2. **Check the health endpoint:** `curl https://your-app.fly.dev/health` — should return `{"status":"ok"}`
-3. **Check logs:** `fly logs` — look for startup errors or missing env vars
-4. **Verify the admin user exists:**
-   ```bash
-   fly ssh console -C "node -e \"const pg=require('pg');const p=new pg.Pool({connectionString:process.env.DATABASE_URL});p.query('SELECT username,role,is_active FROM users').then(r=>{console.log(r.rows);p.end()})\""
-   ```
-
-### Empty column dropdown when creating cards
-
-The `seed_admin.js` script automatically creates default columns. If you skipped it or columns were deleted, re-run:
+### 2. Set Secrets
+**Never** commit secrets to your repository. Set them securely via the Fly CLI:
 ```bash
-fly ssh console -C "node seed_admin.js admin admin@example.com 'YourPassword'"
-```
-Or manually run the column seed:
-```bash
-fly ssh console -C "psql \$DATABASE_URL -f columns_default.sql"
+flyctl secrets set \
+  JWT_SECRET="your-random-secret" \
+  SENDGRID_API_KEY="SG.your-key" \
+  FROM_EMAIL="no-reply@yourdomain.com" \
+  ORIGIN="https://your-app-name.fly.dev"
 ```
 
-## License
+### 3. Initialize Production Database
+Connect to your production database and run the schema and seed scripts:
+```bash
+flyctl postgres connect -a <db-app-name>
+# Inside psql, copy/paste the contents of schema.sql and columns_default.sql
+```
 
-MIT
+Create your production admin:
+```bash
+flyctl console
+# Inside the machine:
+node seed_admin.js admin admin@example.com "YourSecurePassword"
+```
+
+### 4. GitHub Actions CI/CD
+1. Generate a Fly API token: `flyctl tokens create deploy -x 999999h`
+2. Add the token to your GitHub repository secrets as `FLY_API_TOKEN`.
+3. Push to the `main` branch to trigger an automatic deployment.

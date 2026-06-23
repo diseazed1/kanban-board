@@ -1,13 +1,10 @@
 # fly.toml — Kanban Board application configuration for Fly.io
 #
-# IMPORTANT: All secrets MUST be set via:
-#   fly secrets set DATABASE_URL="postgres://..." \
-#                   SESSION_SECRET="long-random-string" \
-#                   SENDGRID_API_KEY="SG.xxx" \
-#                   FROM_EMAIL="noreply@yourdomain.com" \
-#                   APP_URL="https://your-app-name.fly.dev"
+# IMPORTANT: All secrets (DATABASE_URL, JWT_SECRET, SENDGRID_API_KEY,
+# FROM_EMAIL, ORIGIN) MUST be set via:
+#   fly secrets set KEY=value
 #
-# Never commit secrets to this file.
+# Never commit secrets to this file or to app.toml.
 # See README.md → "Deployment" for the full setup checklist.
 
 app            = "kanban-board-jpqmhg"
@@ -24,7 +21,7 @@ primary_region = "iad"
   force_https          = true
   auto_start_machines  = true
   auto_stop_machines   = true
-  min_machines_running = 1
+  min_machines_running = 1          # keep at least one machine warm at all times
 
   # Health check — Fly.io will restart the machine if this fails
   [[http_service.checks]]
@@ -45,28 +42,9 @@ primary_region = "iad"
   NODE_ENV = "production"
 
 # ---------------------------------------------------------------------------
-<<<<<<< HEAD
-# Volume mount — the running machine uses vol_r68mypzp0n6eddp4
-# ---------------------------------------------------------------------------
-# ---------------------------------------------------------------------------
-# VM sizing
-# ---------------------------------------------------------------------------
-# ---------------------------------------------------------------------------
-# ---------------------------------------------------------------------------
-# Volume mount — the running machine uses vol_r68mypzp0n6eddp4
-# ---------------------------------------------------------------------------
-[mounts]
-  source      = "data"
-  destination = "/data"
-
-# ---------------------------------------------------------------------------
-# VM sizing
-# ---------------------------------------------------------------------------
-=======
 # VM sizing
 # ---------------------------------------------------------------------------
 [[vm]]
->>>>>>> fecc1b4 (Reinitialize after .git removal — all source files)
   cpu_kind  = "shared"
   cpus      = 1
   memory_mb = 512
