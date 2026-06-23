@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kanban Board</title>
+    <style>
+        /* ------------------------------------------------------------------ */
+        /* Reset & base                                                         */
+        /* ------------------------------------------------------------------ */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #f0f2f5; color: #2c3e50; }
+
+        /* ------------------------------------------------------------------ */
+        /* Login screen                                                         */
+        /* ------------------------------------------------------------------ */
+        #login-screen {
+            display: flex; justify-content: center; align-items: center;
+            min-height: 100vh; background: linear-gradient(135deg, #2c3e50, #3498db);
+        }
+        .login-box {
+            background: white; padding: 2.5rem; border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.2); width: 340px;
+        }
+        .login-box h2 { margin-bottom: 1.5rem; text-align: center; color: #2c3e50; }
+        .form-group { margin-bottom: 1rem; }
+        .form-group label { display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.3rem; }
+        .form-group input, .form-group select, .form-group textarea {
+            width: 100%; padding: 0.6rem 0.75rem; border: 1px solid #ddd;
+            border-radius: 6px; font-size: 0.95rem; transition: border-color 0.2s;
+        }
+        .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+            outline: none; border-color: #3498db;
+        }
+        .btn {
+            display: inline-block; padding: 0.6rem 1.2rem; border: none;
+            border-radius: 6px; font-size: 0.9rem; font-weight: 600;
+            cursor: pointer; transition: opacity 0.2s, transform 0.1s;
+        }
+        .btn:hover { opacity: 0.9; }
+        .btn:active { transform: scale(0.98); }
+        .btn-primary   { background: #3498db; color: white; }
+        .btn-success   { background: #27ae60; color: white; }
+        .btn-danger    { background: #e74c3c; color: white; }
+        .btn-secondary { background: #95a5a6; color: white; }
+        .btn-full      { width: 100%; }
+        .login-link { text-align: center; margin-top: 1rem; font-size: 0.85rem; }
+        .login-link a { color: #3498db; text-decoration: none; }
+
+        /* ------------------------------------------------------------------ */
+        /* App header                                                           */
+        /* ------------------------------------------------------------------ */
+        #app-header {
+            background: #2c3e50; color: white; padding: 0.75rem 1.5rem;
+            display: flex; justify-content: space-between; align-items: center;
+            position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        }
+        #app-header h1 { font-size: 1.25rem; }
+        .header-actions { display: flex; align-items: center; gap: 0.75rem; }
+        #user-badge {
+            font-size: 0.8rem; background: rgba(255,255,255,0.15);
+            padding: 0.3rem 0.75rem; border-radius: 20px;
+        }
+        #user-badge .role-tag {
+            font-weight: 700; text-transform: uppercase; font-size: 0.7rem;
+            margin-left: 0.4rem; padding: 0.1rem 0.4rem; border-radius: 4px;
+            background: #3498db;
+        }
+        #user-badge .role-tag.admin { background: #e74c3c; }
+
+        /* ------------------------------------------------------------------ */
+        /* Board                                                                */
+        /* ------------------------------------------------------------------ */
+        #board-container { display: none; }
+        .board-toolbar {
+            padding: 0.75rem 1.5rem; background: white;
+            border-bottom: 1px solid #e0e0e0;
+            display: flex; gap: 0.75rem; align-items: center;
+        }
+        .board {
+            display: flex; overflow-x: auto; padding: 1.25rem;
+            gap: 1rem; min-height: calc(100vh - 112px);
+        }
+        .column {
+            min-width: 280px; max-width: 280px; background: #e8eaec;
+            border-radius: 10px; padding: 0.75rem; flex-shrink: 0;
+            display: flex; flex-direction: column;
+        }
+        .column-header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 0.75rem; padding-bottom: 0.5rem;
+            border-bottom: 2px solid #d0d3d7;
+        }
+        .column-title { font-weight: 700; color: #2c3e50; }
+        .wip-counter  { font-size: 0.75rem; color: #7f8c8d; }
+        .wip-exceeded { color: #e74c3c; font-weight: 700; }
+        .cards-container { flex: 1; min-height: 40px; }
+
+        /* ------------------------------------------------------------------ */
+        /* Cards                                                                */
+        /* ------------------------------------------------------------------ */
+        .card {
+            background: white; border-radius: 8px; padding: 0.75rem;
+            margin-bottom: 0.5rem; cursor: pointer;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+            transition: transform 0.15s, box-shadow 0.15s;
+            border-left: 4px solid #bdc3c7;
+            position: relative;
+        }
+        .card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+        .card.dragging { opacity: 0.5; transform: scale(1.03); }
+        .column.drag-over { background: #cce5ff; }
+
+        .card.priority-high   { border-left-color: #e74c3c; }
+        .card.priority-medium { border-left-color: #f39c12; }
+        .card.priority-low    { border-left-color: #27ae60; }
+
+        .card-title { font-weight: 600; font-size: 0.9rem; margin-bottom: 0.4rem; word-break: break-word; }
+        .card-meta  { font-size: 0.75rem; color: #95a5a6; display: flex; justify-content: space-between; align-items: center; }
+
+        /* Visibility badge */
+        .visibility-badge {
+            display: inline-flex; align-items: center; gap: 0.2rem;
+            font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.4rem;
+            border-radius: 4px; text-transform: uppercase;
+        }
+        .visibility-badge.public  { background: #d5f5e3; color: #1e8449; }
+        .visibility-badge.private { background: #fde8e8; color: #c0392b; }
+
+        /* ------------------------------------------------------------------ */
+        /* Card modal (dialog element)                                          */
+        /* ------------------------------------------------------------------ */
+        dialog {
+            border: none; border-radius: 12px; padding: 0;
+            box-shadow: 0 8px 40px rgba(0,0,0,0.25);
+            width: 460px; max-width: 95vw;
+        }
+        dialog::backdrop { background: rgba(0,0,0,0.4); }
+        .modal-header {
+            padding: 1.25rem 1.5rem; border-bottom: 1px solid #eee;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .modal-header h2 { font-size: 1.1rem; }
+        .modal-close { background: none; border: none; font-size: 1.4rem; cursor: pointer; color: #7f8c8d; }
+        .modal-body { padding: 1.5rem; }
+        .modal-footer { padding: 1rem 1.5rem; border-top: 1px solid #eee; display: flex; gap: 0.75rem; justify-content: flex-end; }
+
+        .visibility-toggle {
+            display: flex; align-items: center; gap: 0.75rem;
+            padding: 0.75rem; background: #f8f9fa; border-radius: 8px; margin-top: 0.5rem;
+        }
+        .toggle-switch {
+            position: relative; display: inline-block; width: 46px; height: 24px;
+        }
+        .toggle-switch input { opacity: 0; width: 0; height: 0; }
+        .toggle-slider {
+            position: absolute; cursor: pointer; inset: 0;
+            background: #ccc; border-radius: 24px; transition: 0.3s;
+        }
+        .toggle-slider::before {
+            content: ''; position: absolute; height: 18px; width: 18px;
+            left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: 0.3s;
+        }
+        input:checked + .toggle-slider { background: #27ae60; }
+        input:checked + .toggle-slider::before { transform: translateX(22px); }
+        .toggle-label { font-size: 0.85rem; font-weight: 600; }
+
+        /* ------------------------------------------------------------------ */
+        /* Alerts                                                               */
+        /* ------------------------------------------------------------------ */
+        .alert {
+            padding: 0.75rem 1rem; border-radius: 6px; margin-bottom: 1rem;
+            font-size: 0.875rem;
+        }
+        .alert-error   { background: #fde8e8; color: #c0392b; border: 1px solid #f5c6cb; }
+        .alert-success { background: #d5f5e3; color: #1e8449; border: 1px solid #c3e6cb; }
+    </style>
+</head>
+<body>
+
+<!-- ========================================================================
+     LOGIN SCREEN
+     ======================================================================== -->
+<div id="login-screen">
+    <div class="login-box">
+        <h2>Kanban Board</h2>
+        <div id="login-error" class="alert alert-error" style="display:none;"></div>
+        <form id="loginForm">
+            <div class="form-group">
+                <label for="login-username">Username</label>
+                <input type="text" id="login-username" name="username" autocomplete="username" required>
+            </div>
+            <div class="form-group">
+                <label for="login-password">Password</label>
+                <input type="password" id="login-password" name="password" autocomplete="current-password" required>
+            </div>
+            <button type="submit" class="btn btn-primary btn-full">Sign In</button>
+        </form>
+        <div class="login-link">
+            Have an invite? <a href="/register.html">Create your account</a>
+        </div>
+    </div>
+</div>
+
+<!-- ========================================================================
+     MAIN APP
+     ======================================================================== -->
+<div id="board-container">
+    <header id="app-header">
+        <h1>Kanban Board</h1>
+        <div class="header-actions">
+            <span id="user-badge"></span>
+            <a id="adminLink" href="/admin.html" class="btn btn-danger" style="display:none;">Admin</a>
+            <button id="logoutBtn" class="btn btn-secondary">Logout</button>
+        </div>
+    </header>
+
+    <div class="board-toolbar">
+        <button id="addCardBtn" class="btn btn-primary">+ Add Card</button>
+    </div>
+
+    <div class="board" id="kanban-board"></div>
+</div>
+
+<!-- ========================================================================
+     CARD EDITOR MODAL  (native <dialog> element)
+     ======================================================================== -->
+<dialog id="cardModal">
+    <div class="modal-header">
+        <h2 id="modalTitle">New Card</h2>
+        <button class="modal-close" id="modalClose" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body">
+        <div id="modal-error" class="alert alert-error" style="display:none;"></div>
+        <form id="cardForm">
+            <input type="hidden" id="cardId">
+            <div class="form-group">
+                <label for="cardTitle">Title *</label>
+                <input type="text" id="cardTitle" name="title" required maxlength="200">
+            </div>
+            <div class="form-group">
+                <label for="cardDescription">Description</label>
+                <textarea id="cardDescription" name="description" rows="3"></textarea>
+            </div>
+            <div class="form-group">
+                <label for="cardPriority">Priority</label>
+                <select id="cardPriority" name="priority">
+                    <option value="high">High</option>
+                    <option value="medium" selected>Medium</option>
+                    <option value="low">Low</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="cardColumn">Column</label>
+                <select id="cardColumn" name="column_id"></select>
+            </div>
+            <div class="form-group">
+                <label for="cardAssignee">Assignee (username)</label>
+                <input type="text" id="cardAssignee" name="assignee" placeholder="Leave blank for unassigned">
+            </div>
+
+            <!-- Publish / Visibility toggle -->
+            <div class="visibility-toggle">
+                <label class="toggle-switch">
+                    <input type="checkbox" id="cardPublished" name="published" checked>
+                    <span class="toggle-slider"></span>
+                </label>
+                <div>
+                    <div class="toggle-label" id="visibilityLabel">Published (visible to everyone)</div>
+                    <div style="font-size:0.75rem;color:#7f8c8d;">
+                        When private, only you, your assignee, and admins can see this card.
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+    <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="modalCancelBtn">Cancel</button>
+        <button type="button" class="btn btn-danger" id="deleteCardBtn" style="display:none;">Delete</button>
+        <button type="button" class="btn btn-primary" id="saveCardBtn">Save Card</button>
+    </div>
+</dialog>
+
+<script>
+// ============================================================================
+// State
+// ============================================================================
+let currentUser = null;
+let columns     = [];
+let cards       = [];
+let dragCardId  = null;
+
+// ============================================================================
+// API helper
+// ============================================================================
+async function api(method, path, body) {
+    const opts = {
+        method,
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+    };
+    if (body !== undefined) opts.body = JSON.stringify(body);
+
+    const res = await fetch(path, opts);
+
+    if (res.status === 401) {
+        showLogin();
+        return null;
+    }
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    return data;
+}
+
+// ============================================================================
+// Auth
+// ============================================================================
+function showLogin() {
+    document.getElementById('login-screen').style.display = 'flex';
+    document.getElementById('board-container').style.display = 'none';
+    currentUser = null;
+}
+
+function showBoard() {
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('board-container').style.display = 'block';
+}
+
+document.getElementById('loginForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const errEl = document.getElementById('login-error');
+    errEl.style.display = 'none';
+
+    try {
+        const data = await api('POST', '/api/auth/login', {
+            username: e.target.username.value.trim(),
+            password: e.target.password.value,
+        });
+        if (!data) return;
+
+        currentUser = data;
+        renderUserBadge();
+        showBoard();
+        await loadBoard();
+    } catch (err) {
+        errEl.textContent = err.message;
+        errEl.style.display = 'block';
+    }
+});
+
+document.getElementById('logoutBtn').addEventListener('click', async () => {
+    await api('POST', '/api/auth/logout').catch(() => {});
+    showLogin();
+});
+
+function renderUserBadge() {
+    const badge = document.getElementById('user-badge');
+    badge.innerHTML = `${escapeHtml(currentUser.username)}
+        <span class="role-tag ${currentUser.role}">${currentUser.role}</span>`;
+
+    // Show admin link only for admin users
+    document.getElementById('adminLink').style.display =
+        currentUser.role === 'admin' ? 'inline-block' : 'none';
+}
+
+// ============================================================================
+// Board loading & rendering
+// ============================================================================
+async function loadBoard() {
+    try {
+        [columns, cards] = await Promise.all([
+            api('GET', '/api/columns'),
+            api('GET', '/api/cards'),
+        ]);
+        if (columns && cards) renderBoard();
+    } catch (err) {
+        console.error('Failed to load board:', err);
+    }
+}
+
+function renderBoard() {
+    const board = document.getElementById('kanban-board');
+    board.innerHTML = columns.map(col => {
+        const colCards = cards.filter(c => c.column_id == col.id);
+        const count    = colCards.length;
+        const atLimit  = col.wip_limit && count >= col.wip_limit;
+
+        return `
+        <div class="column" data-column-id="${col.id}">
+            <div class="column-header">
+                <span class="column-title">${escapeHtml(col.name)}</span>
+                <span class="wip-counter ${atLimit ? 'wip-exceeded' : ''}">
+                    ${count}${col.wip_limit ? ' / ' + col.wip_limit : ''}
+                </span>
+            </div>
+            <div class="cards-container" data-column-id="${col.id}">
+                ${colCards.sort((a,b) => a.position_in_column - b.position_in_column)
+                          .map(renderCard).join('')}
+            </div>
+        </div>`;
+    }).join('');
+
+    attachDragListeners();
+}
+
+function renderCard(card) {
+    const isOwner = currentUser && (card.owner_id === currentUser.id || currentUser.role === 'admin');
+    const visClass = card.visibility === 'private' ? 'private' : 'public';
+    const visLabel = card.visibility === 'private' ? '🔒 Private' : '🌐 Public';
+
+    return `
+    <div class="card priority-${card.priority}"
+         draggable="true"
+         data-card-id="${card.id}"
+         data-owner-id="${card.owner_id}">
+        <div class="card-title">${escapeHtml(card.title)}</div>
+        <div class="card-meta">
+            <span>${escapeHtml(card.owner_username || String(card.owner_id))}</span>
+            ${card.assignee_username
+                ? `<span>→ ${escapeHtml(card.assignee_username)}</span>`
+                : ''}
+        </div>
+        <div style="margin-top:0.4rem;display:flex;justify-content:space-between;align-items:center;">
+            <span class="visibility-badge ${visClass}">${visLabel}</span>
+            ${isOwner
+                ? `<button class="btn btn-secondary"
+                           style="padding:0.2rem 0.5rem;font-size:0.7rem;"
+                           onclick="openEditModal('${card.id}');event.stopPropagation();">
+                       Edit
+                   </button>`
+                : ''}
+        </div>
+    </div>`;
+}
+
+// ============================================================================
+// Card modal
+// ============================================================================
+const modal          = document.getElementById('cardModal');
+const cardIdInput    = document.getElementById('cardId');
+const cardTitleInput = document.getElementById('cardTitle');
+const cardDescInput  = document.getElementById('cardDescription');
+const cardPrioInput  = document.getElementById('cardPriority');
+const cardColInput   = document.getElementById('cardColumn');
+const cardAssInput   = document.getElementById('cardAssignee');
+const cardPubInput   = document.getElementById('cardPublished');
+const visLabel       = document.getElementById('visibilityLabel');
+const deleteBtn      = document.getElementById('deleteCardBtn');
+const modalErrEl     = document.getElementById('modal-error');
+
+function populateColumnSelect(selectedId) {
+    cardColInput.innerHTML = columns.map(c =>
+        `<option value="${c.id}" ${c.id == selectedId ? 'selected' : ''}>${escapeHtml(c.name)}</option>`
+    ).join('');
+}
+
+function openNewModal() {
+    document.getElementById('modalTitle').textContent = 'New Card';
+    cardIdInput.value    = '';
+    cardTitleInput.value = '';
+    cardDescInput.value  = '';
+    cardPrioInput.value  = 'medium';
+    cardAssInput.value   = '';
+    cardPubInput.checked = true;
+    deleteBtn.style.display = 'none';
+    modalErrEl.style.display = 'none';
+    populateColumnSelect(columns[0]?.id);
+    updateVisLabel();
+    modal.showModal();
+}
+
+function openEditModal(cardId) {
+    const card = cards.find(c => c.id === cardId);
+    if (!card) return;
+
+    document.getElementById('modalTitle').textContent = 'Edit Card';
+    cardIdInput.value    = card.id;
+    cardTitleInput.value = card.title;
+    cardDescInput.value  = card.description || '';
+    cardPrioInput.value  = card.priority;
+    cardAssInput.value   = card.assignee_username || '';
+    cardPubInput.checked = card.visibility !== 'private';
+    deleteBtn.style.display = 'inline-block';
+    modalErrEl.style.display = 'none';
+    populateColumnSelect(card.column_id);
+    updateVisLabel();
+    modal.showModal();
+}
+
+function updateVisLabel() {
+    visLabel.textContent = cardPubInput.checked
+        ? 'Published (visible to everyone)'
+        : 'Private (only you, assignee, and admins)';
+}
+
+cardPubInput.addEventListener('change', updateVisLabel);
+
+document.getElementById('addCardBtn').addEventListener('click', openNewModal);
+document.getElementById('modalClose').addEventListener('click', () => modal.close());
+document.getElementById('modalCancelBtn').addEventListener('click', () => modal.close());
+
+document.getElementById('saveCardBtn').addEventListener('click', async () => {
+    modalErrEl.style.display = 'none';
+
+    const id         = cardIdInput.value;
+    const visibility = cardPubInput.checked ? 'public' : 'private';
+
+    // Resolve assignee username → id (best-effort; server validates)
+    const payload = {
+        title:             cardTitleInput.value.trim(),
+        description:       cardDescInput.value.trim(),
+        priority:          cardPrioInput.value,
+        column_id:         parseInt(cardColInput.value, 10),
+        assignee_username: cardAssInput.value.trim() || null,
+        visibility,
+    };
+
+    try {
+        if (id) {
+            await api('PUT', `/api/cards/${id}`, payload);
+        } else {
+            await api('POST', '/api/cards', payload);
+        }
+        modal.close();
+        await loadBoard();
+    } catch (err) {
+        modalErrEl.textContent = err.message;
+        modalErrEl.style.display = 'block';
+    }
+});
+
+document.getElementById('deleteCardBtn').addEventListener('click', async () => {
+    const id = cardIdInput.value;
+    if (!id || !confirm('Delete this card? This cannot be undone.')) return;
+
+    try {
+        await api('DELETE', `/api/cards/${id}`);
+        modal.close();
+        await loadBoard();
+    } catch (err) {
+        modalErrEl.textContent = err.message;
+        modalErrEl.style.display = 'block';
+    }
+});
+
+// ============================================================================
+// Drag-and-drop
+// ============================================================================
+function attachDragListeners() {
+    document.querySelectorAll('.card').forEach(card => {
+        card.addEventListener('dragstart', (e) => {
+            dragCardId = card.dataset.cardId;
+            card.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+        });
+        card.addEventListener('dragend', () => {
+            card.classList.remove('dragging');
+            document.querySelectorAll('.column').forEach(c => c.classList.remove('drag-over'));
+        });
+    });
+
+    document.querySelectorAll('.cards-container').forEach(container => {
+        container.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            container.closest('.column').classList.add('drag-over');
+        });
+        container.addEventListener('dragleave', () => {
+            container.closest('.column').classList.remove('drag-over');
+        });
+        container.addEventListener('drop', async (e) => {
+            e.preventDefault();
+            container.closest('.column').classList.remove('drag-over');
+
+            const targetColumnId = parseInt(container.dataset.columnId, 10);
+            if (!dragCardId || !targetColumnId) return;
+
+            try {
+                await api('PUT', `/api/cards/${dragCardId}`, { column_id: targetColumnId });
+                await loadBoard();
+            } catch (err) {
+                alert(`Move failed: ${err.message}`);
+            }
+        });
+    });
+}
+
+// ============================================================================
+// Utilities
+// ============================================================================
+function escapeHtml(text) {
+    const d = document.createElement('div');
+    d.textContent = String(text ?? '');
+    return d.innerHTML;
+}
+
+// ============================================================================
+// Bootstrap — check if already logged in via /api/auth/me
+// ============================================================================
+(async () => {
+    try {
+        const me = await fetch('/api/auth/me', { credentials: 'include' });
+        if (me.ok) {
+            currentUser = await me.json();
+            renderUserBadge();
+            showBoard();
+            await loadBoard();
+        }
+    } catch (_) {
+        // Not logged in — show login screen (default state)
+    }
+})();
+</script>
+</body>
+</html>
