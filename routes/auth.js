@@ -1,16 +1,16 @@
 /**
  * routes/auth.js
  *
- * Authentication endpoints (session-based):
- *   POST /api/auth/login             — credential login, creates session
- *   POST /api/auth/register          — invite-only registration
- *   POST /api/auth/logout            — destroys session
- *   GET  /api/auth/me                — returns current user profile (requires session)
- *   POST /api/auth/change-password   — self-service password change (requires session)
+ * Authentication endpoints:
+ *   POST /api/auth/login     — credential login, issues JWT cookie
+ *   POST /api/auth/register  — invite-only registration
+ *   POST /api/auth/logout    — clears JWT cookie
+ *   GET  /api/auth/me        — returns current user profile (requires auth)
  */
 
-import { Router } from 'express';
-import argon2     from 'argon2';
+import { Router }   from 'express';
+import jwt          from 'jsonwebtoken';
+import argon2       from 'argon2';
 import { authenticate } from '../middleware/auth.js';
 
 const router = Router();
@@ -24,6 +24,16 @@ const ARGON2_OPTIONS = {
     timeCost:    3,       // 3 iterations
     parallelism: 2,
 };
+
+// ---------------------------------------------------------------------------
+// JWT cookie options
+// ---------------------------------------------------------------------------
+const cookieOptions = () => ({
+    httpOnly: true,
+    sameSite: 'strict',
+    secure:   process.env.NODE_ENV === 'production',
+    maxAge:   8 * 60 * 60 * 1000,   // 8 hours
+});
 
 // ---------------------------------------------------------------------------
 // Helper: write an audit log entry (fire-and-forget — never blocks response)
@@ -50,7 +60,7 @@ router.post('/login', async (req, res) => {
             `SELECT id, username, email, password_hash, role
              FROM users
              WHERE username = $1 AND is_active = true`,
-            [username.trim()]
+            [username]
         );
 
         const user = result.rows[0];
@@ -67,39 +77,22 @@ router.post('/login', async (req, res) => {
             return res.status(401).json({ error: INVALID });
         }
 
-        // Create session — this is the key authentication step
-        const sessionUser = {
-            id:       user.id,
-            username: user.username,
-            email:    user.email,
-            role:     user.role,
-        };
+        // Issue JWT
+        const token = jwt.sign(
+            { id: user.id, username: user.username, role: user.role },
+            process.env.JWT_SECRET,
+            { expiresIn: '8h' }
+        );
 
-        // Regenerate session ID to prevent session fixation attacks
-        req.session.regenerate((err) => {
-            if (err) {
-                console.error('Session regenerate error:', err);
-                return res.status(500).json({ error: 'Server error during login' });
-            }
+        res.cookie('token', token, cookieOptions());
 
-            req.session.user = sessionUser;
+        // Update last_login (non-blocking)
+        req.db.query('UPDATE users SET last_login = NOW() WHERE id = $1', [user.id])
+            .catch((err) => console.error('last_login update failed:', err));
 
-            // Save session explicitly to ensure it's persisted before responding
-            req.session.save((saveErr) => {
-                if (saveErr) {
-                    console.error('Session save error:', saveErr);
-                    return res.status(500).json({ error: 'Server error during login' });
-                }
+        audit(req.db, 'login', user.id, req.ip, { username: user.username });
 
-                // Update last_login (non-blocking)
-                req.db.query('UPDATE users SET last_login = NOW() WHERE id = $1', [user.id])
-                    .catch((e) => console.error('last_login update failed:', e));
-
-                audit(req.db, 'login', user.id, req.ip, { username: user.username });
-
-                res.json(sessionUser);
-            });
-        });
+        res.json({ username: user.username, role: user.role });
 
     } catch (err) {
         console.error('Login error:', err);
@@ -119,7 +112,7 @@ router.post('/register', async (req, res) => {
 
     // Basic input validation
     if (username.length < 3 || username.length > 30 || !/^[a-zA-Z0-9_-]+$/.test(username)) {
-        return res.status(400).json({ error: 'Username must be 3-30 characters (letters, numbers, _ or -)' });
+        return res.status(400).json({ error: 'Username must be 3–30 characters (letters, numbers, _ or -)' });
     }
     if (password.length < 8) {
         return res.status(400).json({ error: 'Password must be at least 8 characters' });
@@ -158,8 +151,8 @@ router.post('/register', async (req, res) => {
         const userResult = await client.query(
             `INSERT INTO users (username, email, password_hash)
              VALUES ($1, $2, $3)
-             RETURNING id, username, email, role`,
-            [username.trim(), email.trim().toLowerCase(), passwordHash]
+             RETURNING id, username, role`,
+            [username, email, passwordHash]
         );
 
         // Consume the invite
@@ -169,27 +162,18 @@ router.post('/register', async (req, res) => {
 
         const user = userResult.rows[0];
 
-        // Create session for the newly registered user
-        const sessionUser = {
-            id:       user.id,
-            username: user.username,
-            email:    user.email,
-            role:     user.role,
-        };
+        // Issue JWT
+        const jwtToken = jwt.sign(
+            { id: user.id, username: user.username, role: user.role },
+            process.env.JWT_SECRET,
+            { expiresIn: '8h' }
+        );
 
-        req.session.regenerate((err) => {
-            if (err) {
-                console.error('Session regenerate error:', err);
-                return res.status(201).json(sessionUser); // still created, just no auto-login
-            }
+        res.cookie('token', jwtToken, cookieOptions());
 
-            req.session.user = sessionUser;
-            req.session.save((saveErr) => {
-                if (saveErr) console.error('Session save error:', saveErr);
-                audit(req.db, 'register', user.id, req.ip, { username: user.username });
-                res.status(201).json(sessionUser);
-            });
-        });
+        audit(req.db, 'register', user.id, req.ip, { username: user.username });
+
+        res.status(201).json({ username: user.username, role: user.role });
 
     } catch (err) {
         await client.query('ROLLBACK').catch(() => {});
@@ -209,83 +193,22 @@ router.post('/register', async (req, res) => {
 // POST /api/auth/logout
 // ---------------------------------------------------------------------------
 router.post('/logout', (req, res) => {
-    if (!req.session) {
-        return res.json({ message: 'Already logged out' });
-    }
-
-    const userId   = req.session.user?.id;
-    const username = req.session.user?.username;
-
-    req.session.destroy((err) => {
-        if (err) {
-            console.error('Session destroy error:', err);
-            return res.status(500).json({ error: 'Error logging out' });
-        }
-
-        res.clearCookie('kanban.sid');
-
-        if (userId) {
-            audit(req.db, 'logout', userId, req.ip, { username });
-        }
-
-        res.json({ message: 'Logged out successfully' });
+    res.clearCookie('token', {
+        httpOnly: true,
+        sameSite: 'strict',
+        secure:   process.env.NODE_ENV === 'production',
     });
+    res.json({ message: 'Logged out successfully' });
 });
 
 // ---------------------------------------------------------------------------
-// GET /api/auth/me  (requires session)
+// GET /api/auth/me  (requires authentication)
 // ---------------------------------------------------------------------------
 router.get('/me', authenticate, async (req, res) => {
     try {
-        // Fetch fresh data from DB (role may have changed since session was created)
         const result = await req.db.query(
             `SELECT id, username, email, role, created_at, last_login
-             FROM users WHERE id = $1 AND is_active = true`,
-            [req.user.id]
-        );
-
-        if (!result.rows[0]) {
-            // User was deactivated or deleted — destroy session
-            req.session.destroy(() => {});
-            return res.status(401).json({ error: 'Account no longer active' });
-        }
-
-        const freshUser = result.rows[0];
-
-        // Update session if role changed
-        if (freshUser.role !== req.session.user.role) {
-            req.session.user.role = freshUser.role;
-        }
-
-        res.json(freshUser);
-    } catch (err) {
-        console.error('GET /me error:', err);
-        res.status(500).json({ error: 'Server error fetching user info' });
-    }
-});
-
-// ---------------------------------------------------------------------------
-// POST /api/auth/change-password  (self-service — any authenticated user)
-// ---------------------------------------------------------------------------
-router.post('/change-password', authenticate, async (req, res) => {
-    const { current_password, new_password } = req.body;
-
-    if (!current_password || !new_password) {
-        return res.status(400).json({ error: 'Both current_password and new_password are required' });
-    }
-
-    if (new_password.length < 8) {
-        return res.status(400).json({ error: 'New password must be at least 8 characters' });
-    }
-
-    if (current_password === new_password) {
-        return res.status(400).json({ error: 'New password must be different from the current password' });
-    }
-
-    try {
-        // Fetch current hash
-        const result = await req.db.query(
-            'SELECT password_hash FROM users WHERE id = $1',
+             FROM users WHERE id = $1`,
             [req.user.id]
         );
 
@@ -293,25 +216,10 @@ router.post('/change-password', authenticate, async (req, res) => {
             return res.status(404).json({ error: 'User not found' });
         }
 
-        // Verify current password
-        const valid = await argon2.verify(result.rows[0].password_hash, current_password);
-        if (!valid) {
-            return res.status(401).json({ error: 'Current password is incorrect' });
-        }
-
-        // Hash and store new password
-        const newHash = await argon2.hash(new_password, ARGON2_OPTIONS);
-        await req.db.query(
-            'UPDATE users SET password_hash = $1 WHERE id = $2',
-            [newHash, req.user.id]
-        );
-
-        audit(req.db, 'password_change', req.user.id, req.ip, { username: req.user.username });
-
-        res.json({ message: 'Password changed successfully' });
+        res.json(result.rows[0]);
     } catch (err) {
-        console.error('Change password error:', err);
-        res.status(500).json({ error: 'Server error changing password' });
+        console.error('GET /me error:', err);
+        res.status(500).json({ error: 'Server error fetching user info' });
     }
 });
 

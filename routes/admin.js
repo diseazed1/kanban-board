@@ -5,7 +5,6 @@
  *
  *   GET    /api/admin/users              — list all users
  *   PUT    /api/admin/users/:id          — update role and/or active status
- *   POST   /api/admin/users/:id/reset-password — force-reset a user's password
  *   DELETE /api/admin/users/:id          — permanently delete a user
  *
  *   GET    /api/admin/invites            — list pending (unused) invites
@@ -17,7 +16,6 @@
 
 import { Router } from 'express';
 import sgMail     from '@sendgrid/mail';
-import argon2     from 'argon2';
 
 const router = Router();
 
@@ -109,51 +107,6 @@ router.put('/users/:id', async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// POST /api/admin/users/:id/reset-password  — admin force-resets a user's password
-// ---------------------------------------------------------------------------
-router.post('/users/:id/reset-password', async (req, res) => {
-    const targetId = parseInt(req.params.id, 10);
-
-    if (isNaN(targetId)) {
-        return res.status(400).json({ error: 'Invalid user ID' });
-    }
-
-    const { new_password } = req.body;
-
-    if (!new_password || new_password.length < 8) {
-        return res.status(400).json({ error: 'new_password is required and must be at least 8 characters' });
-    }
-
-    try {
-        // Verify target user exists
-        const userCheck = await req.db.query('SELECT id, username FROM users WHERE id = $1', [targetId]);
-        if (userCheck.rowCount === 0) {
-            return res.status(404).json({ error: 'User not found' });
-        }
-
-        // Hash and store new password
-        const newHash = await argon2.hash(new_password, {
-            type:        argon2.argon2id,
-            memoryCost:  65536,
-            timeCost:    3,
-            parallelism: 2,
-        });
-
-        await req.db.query('UPDATE users SET password_hash = $1 WHERE id = $2', [newHash, targetId]);
-
-        audit(req.db, 'admin_password_reset', req.user.id, req.ip, {
-            target_user_id: targetId,
-            target_username: userCheck.rows[0].username,
-        });
-
-        res.json({ message: `Password reset successfully for user "${userCheck.rows[0].username}"` });
-    } catch (err) {
-        console.error('Admin password reset error:', err);
-        res.status(500).json({ error: 'Server error resetting password' });
-    }
-});
-
-// ---------------------------------------------------------------------------
 // DELETE /api/admin/users/:id  — hard delete (use with caution)
 // ---------------------------------------------------------------------------
 router.delete('/users/:id', async (req, res) => {
@@ -238,7 +191,7 @@ router.post('/invites/send', async (req, res) => {
         );
 
         const invite = inviteResult.rows[0];
-        const registrationUrl = `${process.env.APP_URL || process.env.ORIGIN || 'http://localhost:3000'}/register.html?token=${invite.token}`;
+        const registrationUrl = `${process.env.ORIGIN}/register.html?token=${invite.token}`;
 
         // Send invite email via SendGrid
         sgMail.setApiKey(process.env.SENDGRID_API_KEY);
