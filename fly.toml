@@ -1,0 +1,50 @@
+# fly.toml — Kanban Board application configuration for Fly.io
+#
+# IMPORTANT: All secrets (DATABASE_URL, JWT_SECRET, SENDGRID_API_KEY,
+# FROM_EMAIL, ORIGIN) MUST be set via:
+#   fly secrets set KEY=value
+#
+# Never commit secrets to this file or to app.toml.
+# See README.md → "Deployment" for the full setup checklist.
+
+app            = "kanban-board-jpqmhg"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+# ---------------------------------------------------------------------------
+# HTTP service
+# ---------------------------------------------------------------------------
+[http_service]
+  internal_port        = 3000
+  force_https          = true
+  auto_start_machines  = true
+  auto_stop_machines   = true
+  min_machines_running = 1          # keep at least one machine warm at all times
+
+  # Health check — Fly.io will restart the machine if this fails
+  [[http_service.checks]]
+    grace_period  = "10s"
+    interval      = "30s"
+    method        = "GET"
+    path          = "/health"
+    protocol      = "http"
+    timeout       = "5s"
+    tls_skip_verify = false
+
+# ---------------------------------------------------------------------------
+# Non-secret environment variables
+# (Secrets go in `fly secrets set`, NOT here)
+# ---------------------------------------------------------------------------
+[env]
+  PORT     = "3000"
+  NODE_ENV = "production"
+
+# ---------------------------------------------------------------------------
+# VM sizing
+# ---------------------------------------------------------------------------
+[[vm]]
+  cpu_kind  = "shared"
+  cpus      = 1
+  memory_mb = 512

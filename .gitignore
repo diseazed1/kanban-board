@@ -1,0 +1,12 @@
+node_modules/
+.env
+*.env.local
+npm-debug.log*
+.DS_Store
+*.log
+
+# Never commit these — use `fly secrets set` instead
+app.toml
+fly_deploy.sh
+test_sendgrid.js
+seed_admin.sql
