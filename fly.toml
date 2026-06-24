@@ -1,10 +1,10 @@
-# fly.toml app configuration file generated for kanban-board-m9hdog on 2026-06-23T23:56:36Z
+# fly.toml app configuration file generated for kanban-board-m9hdog on 2026-06-24T00:55:42Z
 #
 # See https://fly.io/docs/reference/configuration/ for information about how to use this file.
 #
 
 app = 'kanban-board-m9hdog'
-primary_region = 'dfw'
+primary_region = 'lax'
 
 [build]
   dockerfile = 'Dockerfile'
