@@ -1,5 +1,5 @@
 # =============================================================================
-# Kanban Board — Multi-stage Docker build
+# Kanban Board — Multi-stage Docker build (FIXED & OPTIMIZED)
 # =============================================================================
 
 # ---- Stage 1: Install production dependencies --------------------------------
@@ -7,30 +7,32 @@ FROM node:20-alpine AS deps
 WORKDIR /app
 
 COPY package*.json ./
-# Install only production dependencies; skip devDependencies
-RUN npm ci --omit=dev
+# Use npm install to ensure it works even if the lockfile is missing/incomplete
+RUN npm install --omit=dev
 
 # ---- Stage 2: Runtime image --------------------------------------------------
 FROM node:20-alpine AS runtime
 WORKDIR /app
 
-# Copy production node_modules from the deps stage
-COPY --from=deps /app/node_modules ./node_modules
+# Set production environment for optimized performance
+ENV NODE_ENV=production
 
-# Copy application source files
-COPY server.mjs        ./
-COPY package.json      ./
-COPY middleware/       ./middleware/
-COPY routes/           ./routes/
-COPY public/           ./public/
+# Create a non-root user and group first
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+
+# Copy production node_modules from the deps stage with correct ownership
+COPY --from=deps --chown=appuser:appgroup /app/node_modules ./node_modules
+
+# Copy application source files with correct ownership
+COPY --chown=appuser:appgroup server.mjs package.json ./
+COPY --chown=appuser:appgroup middleware/ ./middleware/
+COPY --chown=appuser:appgroup routes/ ./routes/
+COPY --chown=appuser:appgroup public/ ./public/
 
 # Copy database scripts (used during initial setup, not at runtime)
-COPY schema.sql        ./
-COPY columns_default.sql ./
-COPY seed_admin.js     ./
+COPY --chown=appuser:appgroup schema.sql columns_default.sql seed_admin.js ./
 
-# Non-root user for security
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+# Switch to non-root user
 USER appuser
 
 EXPOSE 3000
