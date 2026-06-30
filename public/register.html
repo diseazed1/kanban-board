@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create Account — Kanban Board</title>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+            background: linear-gradient(135deg, #2c3e50, #3498db);
+            min-height: 100vh; display: flex; justify-content: center; align-items: center;
+        }
+        .register-box {
+            background: white; padding: 2.5rem; border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.2); width: 400px; max-width: 95vw;
+        }
+        h2 { margin-bottom: 0.5rem; color: #2c3e50; }
+        .subtitle { color: #7f8c8d; font-size: 0.875rem; margin-bottom: 1.5rem; }
+        .form-group { margin-bottom: 1rem; }
+        .form-group label { display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.3rem; }
+        .form-group input {
+            width: 100%; padding: 0.6rem 0.75rem; border: 1px solid #ddd;
+            border-radius: 6px; font-size: 0.95rem; transition: border-color 0.2s;
+        }
+        .form-group input:focus { outline: none; border-color: #3498db; }
+        .btn {
+            display: block; width: 100%; padding: 0.75rem; border: none;
+            border-radius: 6px; font-size: 1rem; font-weight: 600;
+            cursor: pointer; transition: opacity 0.2s;
+        }
+        .btn:hover { opacity: 0.9; }
+        .btn-primary { background: #3498db; color: white; margin-top: 1rem; }
+        .alert { padding: 0.75rem 1rem; border-radius: 6px; margin-bottom: 1rem; font-size: 0.875rem; }
+        .alert-error   { background: #fde8e8; color: #c0392b; border: 1px solid #f5c6cb; }
+        .alert-success { background: #d5f5e3; color: #1e8449; border: 1px solid #c3e6cb; }
+        .login-link { text-align: center; margin-top: 1rem; font-size: 0.85rem; }
+        .login-link a { color: #3498db; text-decoration: none; }
+        .password-hint { font-size: 0.75rem; color: #7f8c8d; margin-top: 0.25rem; }
+        #token-status { padding: 0.5rem; border-radius: 6px; font-size: 0.85rem; margin-bottom: 1rem; }
+        .token-valid   { background: #d5f5e3; color: #1e8449; }
+        .token-invalid { background: #fde8e8; color: #c0392b; }
+    </style>
+</head>
+<body>
+    <div class="register-box">
+        <h2>Create Your Account</h2>
+        <p class="subtitle">You've been invited to join the Kanban Board.</p>
+
+        <div id="token-status" style="display:none;"></div>
+        <div id="reg-error"   class="alert alert-error"   style="display:none;"></div>
+        <div id="reg-success" class="alert alert-success" style="display:none;"></div>
+
+        <form id="registerForm">
+            <input type="hidden" id="inviteToken">
+
+            <div class="form-group">
+                <label for="reg-username">Username</label>
+                <input type="text" id="reg-username" name="username"
+                       minlength="3" maxlength="30"
+                       pattern="[a-zA-Z0-9_-]+"
+                       autocomplete="username" required>
+                <div class="password-hint">3–30 characters. Letters, numbers, _ and - only.</div>
+            </div>
+
+            <div class="form-group">
+                <label for="reg-email">Email</label>
+                <input type="email" id="reg-email" name="email" autocomplete="email" required>
+            </div>
+
+            <div class="form-group">
+                <label for="reg-password">Password</label>
+                <input type="password" id="reg-password" name="password"
+                       minlength="8" autocomplete="new-password" required>
+                <div class="password-hint">At least 8 characters.</div>
+            </div>
+
+            <div class="form-group">
+                <label for="reg-confirm">Confirm Password</label>
+                <input type="password" id="reg-confirm" name="confirm"
+                       autocomplete="new-password" required>
+            </div>
+
+            <button type="submit" class="btn btn-primary" id="submitBtn">Create Account</button>
+        </form>
+
+        <div class="login-link">
+            Already have an account? <a href="/">Sign in</a>
+        </div>
+    </div>
+
+    <script>
+        const errEl     = document.getElementById('reg-error');
+        const successEl = document.getElementById('reg-success');
+        const tokenEl   = document.getElementById('inviteToken');
+        const statusEl  = document.getElementById('token-status');
+        const submitBtn = document.getElementById('submitBtn');
+
+        // Extract invite token from URL query string
+        const params = new URLSearchParams(window.location.search);
+        const token  = params.get('token');
+
+        if (!token) {
+            statusEl.textContent = 'No invite token found. Please use the link from your invitation email.';
+            statusEl.className   = 'token-invalid';
+            statusEl.style.display = 'block';
+            submitBtn.disabled = true;
+        } else {
+            tokenEl.value = token;
+            statusEl.textContent = 'Invite token detected. Fill in the form below to create your account.';
+            statusEl.className   = 'token-valid';
+            statusEl.style.display = 'block';
+        }
+
+        document.getElementById('registerForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            errEl.style.display     = 'none';
+            successEl.style.display = 'none';
+
+            const username = e.target.username.value.trim();
+            const email    = e.target.email.value.trim();
+            const password = e.target.password.value;
+            const confirm  = e.target.confirm.value;
+
+            if (password !== confirm) {
+                errEl.textContent   = 'Passwords do not match.';
+                errEl.style.display = 'block';
+                return;
+            }
+
+            submitBtn.disabled   = true;
+            submitBtn.textContent = 'Creating account…';
+
+            try {
+                const res = await fetch('/api/auth/register', {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        token:    tokenEl.value,
+                        username,
+                        email,
+                        password,
+                    }),
+                });
+
+                const data = await res.json().catch(() => ({}));
+
+                if (res.ok) {
+                    successEl.textContent   = `Account created! Welcome, ${data.username}. Redirecting…`;
+                    successEl.style.display = 'block';
+                    setTimeout(() => { window.location.href = '/'; }, 1500);
+                } else {
+                    errEl.textContent   = data.error || 'Registration failed. Please try again.';
+                    errEl.style.display = 'block';
+                    submitBtn.disabled   = false;
+                    submitBtn.textContent = 'Create Account';
+                }
+            } catch (err) {
+                errEl.textContent   = 'Network error. Please check your connection and try again.';
+                errEl.style.display = 'block';
+                submitBtn.disabled   = false;
+                submitBtn.textContent = 'Create Account';
+            }
+        });
+    </script>
+</body>
+</html>
