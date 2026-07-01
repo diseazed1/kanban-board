@@ -11,8 +11,14 @@ DO $$ BEGIN
     CREATE TYPE user_role   AS ENUM ('admin', 'user', 'viewer');
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
+<<<<<<< HEAD
 DO $$ BEGIN
     CREATE TYPE card_priority AS ENUM ('high', 'medium', 'low');
+=======
+-- 5-level priority: critical > high > medium > low > minimal
+DO $$ BEGIN
+    CREATE TYPE card_priority AS ENUM ('critical', 'high', 'medium', 'low', 'minimal');
+>>>>>>> fecc1b4 (Reinitialize after .git removal — all source files)
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 DO $$ BEGIN
@@ -77,11 +83,44 @@ CREATE TABLE IF NOT EXISTS cards (
 );
 
 -- ---------------------------------------------------------------------------
+<<<<<<< HEAD
+=======
+-- Card comments  (user discussion on individual cards)
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS card_comments (
+    id          SERIAL       PRIMARY KEY,
+    card_id     UUID         NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+    user_id     INT          NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    body        TEXT         NOT NULL,
+    created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    updated_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+-- ---------------------------------------------------------------------------
+-- Card activity log  (timeline of card events: moves, edits, etc.)
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS card_activity (
+    id          SERIAL       PRIMARY KEY,
+    card_id     UUID         NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+    user_id     INT          REFERENCES users(id) ON DELETE SET NULL,
+    action      VARCHAR(50)  NOT NULL,
+    -- e.g. 'created', 'moved', 'edited', 'priority_changed',
+    --      'visibility_changed', 'assigned', 'comment_added'
+    details     JSONB        NOT NULL DEFAULT '{}',
+    created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+-- ---------------------------------------------------------------------------
+>>>>>>> fecc1b4 (Reinitialize after .git removal — all source files)
 -- Audit log  (admin dashboard metrics)
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS audit_log (
     id          SERIAL       PRIMARY KEY,
+<<<<<<< HEAD
     action      VARCHAR(50)  NOT NULL,   -- 'login', 'card_create', 'invite_send', …
+=======
+    action      VARCHAR(50)  NOT NULL,   -- 'login', 'card_create', 'invite_send', ...
+>>>>>>> fecc1b4 (Reinitialize after .git removal — all source files)
     user_id     INT          REFERENCES users(id) ON DELETE SET NULL,
     ip_address  INET,
     metadata    JSONB        NOT NULL DEFAULT '{}',
@@ -91,6 +130,7 @@ CREATE TABLE IF NOT EXISTS audit_log (
 -- ---------------------------------------------------------------------------
 -- Indexes
 -- ---------------------------------------------------------------------------
+<<<<<<< HEAD
 CREATE INDEX IF NOT EXISTS idx_cards_column    ON cards(column_id);
 CREATE INDEX IF NOT EXISTS idx_cards_owner     ON cards(owner_id);
 CREATE INDEX IF NOT EXISTS idx_cards_assignee  ON cards(assignee_id);
@@ -99,3 +139,17 @@ CREATE INDEX IF NOT EXISTS idx_audit_user      ON audit_log(user_id);
 CREATE INDEX IF NOT EXISTS idx_audit_created   ON audit_log(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_invites_used    ON invites(used);
 CREATE INDEX IF NOT EXISTS idx_invites_email   ON invites(email);
+=======
+CREATE INDEX IF NOT EXISTS idx_cards_column       ON cards(column_id);
+CREATE INDEX IF NOT EXISTS idx_cards_owner        ON cards(owner_id);
+CREATE INDEX IF NOT EXISTS idx_cards_assignee     ON cards(assignee_id);
+CREATE INDEX IF NOT EXISTS idx_cards_visibility   ON cards(visibility);
+CREATE INDEX IF NOT EXISTS idx_comments_card      ON card_comments(card_id);
+CREATE INDEX IF NOT EXISTS idx_comments_user      ON card_comments(user_id);
+CREATE INDEX IF NOT EXISTS idx_activity_card      ON card_activity(card_id);
+CREATE INDEX IF NOT EXISTS idx_activity_created   ON card_activity(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_user         ON audit_log(user_id);
+CREATE INDEX IF NOT EXISTS idx_audit_created      ON audit_log(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_invites_used       ON invites(used);
+CREATE INDEX IF NOT EXISTS idx_invites_email      ON invites(email);
+>>>>>>> fecc1b4 (Reinitialize after .git removal — all source files)
