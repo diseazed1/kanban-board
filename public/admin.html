@@ -233,7 +233,7 @@ function showAlert(containerId, message, type = 'error') {
     document.getElementById('admin-user-badge').textContent = currentUser.username;
     document.getElementById('admin-content').style.display = 'block';
 
-    await Promise.all([loadUsers(), loadInvites(), loadAuditLog()]);
+    await Promise.all([loadUsers(), loadInvites().catch(e => { console.error('loadInvites error:', e.message); }), loadAuditLog()]);
 })();
 
 // ============================================================================
@@ -359,8 +359,8 @@ async function loadUsers() {
 // Invites
 // ============================================================================
 async function loadInvites() {
-    const invites = await api('GET', '/api/admin/invites');
-    if (!invites) return;
+    const invites = await api('GET', '/api/admin/invits').catch(() => []);
+    if (!Array.isArray(invites)) return;
 
     const tbody = document.querySelector('#inviteTable tbody');
     if (invites.length === 0) {
