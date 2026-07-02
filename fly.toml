@@ -51,3 +51,7 @@ primary_region = "iad"
   cpu_kind  = "shared"
   cpus      = 1
   memory_mb = 512
+
+[mounts]
+  source      = "data"
+  destination = "/data"
