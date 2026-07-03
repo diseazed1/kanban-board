@@ -32,6 +32,7 @@ COPY schema.sql        ./
 COPY columns_default.sql ./
 COPY seed_admin.js     ./
 COPY run_migrations.cjs ./
+COPY reset_admin_pw.cjs ./
 COPY migrations/       ./migrations/
 
 # Non-root user for security
