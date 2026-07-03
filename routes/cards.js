@@ -907,8 +907,8 @@ router.patch('/:id/unarchive', async (req, res) => {
 
         const result = await req.db.query(
             `UPDATE cards SET is_archived = FALSE, archived_at = NULL, archived_by = NULL, updated_at = NOW()
-             WHERE id = $2 RETURNING *`,
-            [userId, req.params.id]
+             WHERE id = $1 RETURNING *`,
+            [req.params.id]
         );
         logActivity(req.db, req.params.id, userId, 'unarchived', { title: card.title });
         logBoardActivity(req.db, userId, 'card_unarchived', req.params.id, card.title, {});
