@@ -213,15 +213,103 @@ router.get('/', async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// NOTIFICATIONS — must be declared before /:id to avoid route collision
+// ---------------------------------------------------------------------------
+router.get('/notifications', async (req, res) => {
+    const { id: userId } = req.user;
+    try {
+        const result = await req.db.query(
+            `SELECT n.*, c.title AS card_title, a.username AS actor_username
+             FROM notifications n
+             LEFT JOIN cards c ON c.id = n.card_id
+             LEFT JOIN users a ON a.id = n.actor_id
+             WHERE n.user_id = $1
+             ORDER BY n.created_at DESC
+             LIMIT 50`,
+            [userId]
+        );
+        const unread = result.rows.filter(n => !n.is_read).length;
+        res.json({ notifications: result.rows, unread_count: unread });
+    } catch (err) {
+        console.error('Notifications fetch error:', err);
+        res.status(500).json({ error: 'Server error fetching notifications' });
+    }
+});
+router.patch('/notifications/read-all', async (req, res) => {
+    const { id: userId } = req.user;
+    try {
+        await req.db.query(
+            'UPDATE notifications SET is_read = TRUE WHERE user_id = $1 AND is_read = FALSE',
+            [userId]
+        );
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: 'Server error marking notifications read' });
+    }
+});
+router.patch('/notifications/:notificationId/read', async (req, res) => {
+    const { id: userId } = req.user;
+    try {
+        await req.db.query(
+            'UPDATE notifications SET is_read = TRUE WHERE id = $1 AND user_id = $2',
+            [req.params.notificationId, userId]
+        );
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: 'Server error marking notification read' });
+    }
+});
+// ---------------------------------------------------------------------------
+// SAVED VIEWS — must be declared before /:id to avoid route collision
+// ---------------------------------------------------------------------------
+router.get('/views', async (req, res) => {
+    const { id: userId } = req.user;
+    try {
+        const result = await req.db.query(
+            'SELECT * FROM saved_views WHERE user_id = $1 ORDER BY created_at ASC',
+            [userId]
+        );
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: 'Server error fetching saved views' });
+    }
+});
+router.post('/views', async (req, res) => {
+    const { id: userId } = req.user;
+    const { name, filters } = req.body;
+    if (!name?.trim()) return res.status(400).json({ error: 'View name is required' });
+    if (!filters || typeof filters !== 'object')
+        return res.status(400).json({ error: 'filters must be an object' });
+    try {
+        const result = await req.db.query(
+            `INSERT INTO saved_views (user_id, name, filters)
+             VALUES ($1, $2, $3)
+             ON CONFLICT (user_id, name) DO UPDATE SET filters = EXCLUDED.filters
+             RETURNING *`,
+            [userId, name.trim(), JSON.stringify(filters)]
+        );
+        res.status(201).json(result.rows[0]);
+    } catch (err) {
+        res.status(500).json({ error: 'Server error saving view' });
+    }
+});
+router.delete('/views/:viewId', async (req, res) => {
+    const { id: userId } = req.user;
+    try {
+        await req.db.query(
+            'DELETE FROM saved_views WHERE id = $1 AND user_id = $2',
+            [req.params.viewId, userId]
+        );
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: 'Server error deleting view' });
+    }
+});
+// ---------------------------------------------------------------------------
 // GET /api/cards/:id
 // ---------------------------------------------------------------------------
 router.get('/:id', async (req, res) => {
     const { id: userId, role } = req.user;
-
-    // Protect static sub-routes from being caught as card IDs
-    if (['notifications', 'views'].includes(req.params.id)) {
-        return res.status(404).json({ error: 'Not found' });
-    }
 
     try {
         const result = await req.db.query(
@@ -986,114 +1074,6 @@ router.delete('/:id/attachments/:attachmentId', async (req, res) => {
     } catch (err) {
         console.error('Attachment delete error:', err);
         res.status(500).json({ error: 'Server error deleting attachment' });
-    }
-});
-
-// ===========================================================================
-// NOTIFICATIONS
-// ===========================================================================
-
-router.get('/notifications', async (req, res) => {
-    const { id: userId } = req.user;
-    try {
-        const result = await req.db.query(
-            `SELECT n.*, c.title AS card_title, a.username AS actor_username
-             FROM notifications n
-             LEFT JOIN cards c ON c.id = n.card_id
-             LEFT JOIN users a ON a.id = n.actor_id
-             WHERE n.user_id = $1
-             ORDER BY n.created_at DESC
-             LIMIT 50`,
-            [userId]
-        );
-        const unread = result.rows.filter(n => !n.is_read).length;
-        res.json({ notifications: result.rows, unread_count: unread });
-    } catch (err) {
-        console.error('Notifications fetch error:', err);
-        res.status(500).json({ error: 'Server error fetching notifications' });
-    }
-});
-
-router.patch('/notifications/read-all', async (req, res) => {
-    const { id: userId } = req.user;
-    try {
-        await req.db.query(
-            'UPDATE notifications SET is_read = TRUE WHERE user_id = $1 AND is_read = FALSE',
-            [userId]
-        );
-        res.json({ success: true });
-    } catch (err) {
-        console.error('Mark all read error:', err);
-        res.status(500).json({ error: 'Server error marking notifications read' });
-    }
-});
-
-router.patch('/notifications/:notificationId/read', async (req, res) => {
-    const { id: userId } = req.user;
-    try {
-        await req.db.query(
-            'UPDATE notifications SET is_read = TRUE WHERE id = $1 AND user_id = $2',
-            [req.params.notificationId, userId]
-        );
-        res.json({ success: true });
-    } catch (err) {
-        console.error('Mark read error:', err);
-        res.status(500).json({ error: 'Server error marking notification read' });
-    }
-});
-
-// ===========================================================================
-// SAVED FILTER VIEWS
-// ===========================================================================
-
-router.get('/views', async (req, res) => {
-    const { id: userId } = req.user;
-    try {
-        const result = await req.db.query(
-            'SELECT * FROM saved_views WHERE user_id = $1 ORDER BY created_at ASC',
-            [userId]
-        );
-        res.json(result.rows);
-    } catch (err) {
-        console.error('Saved views fetch error:', err);
-        res.status(500).json({ error: 'Server error fetching saved views' });
-    }
-});
-
-router.post('/views', async (req, res) => {
-    const { id: userId } = req.user;
-    const { name, filters } = req.body;
-
-    if (!name?.trim()) return res.status(400).json({ error: 'View name is required' });
-    if (!filters || typeof filters !== 'object')
-        return res.status(400).json({ error: 'filters must be an object' });
-
-    try {
-        const result = await req.db.query(
-            `INSERT INTO saved_views (user_id, name, filters)
-             VALUES ($1, $2, $3)
-             ON CONFLICT (user_id, name) DO UPDATE SET filters = EXCLUDED.filters
-             RETURNING *`,
-            [userId, name.trim(), JSON.stringify(filters)]
-        );
-        res.status(201).json(result.rows[0]);
-    } catch (err) {
-        console.error('Save view error:', err);
-        res.status(500).json({ error: 'Server error saving view' });
-    }
-});
-
-router.delete('/views/:viewId', async (req, res) => {
-    const { id: userId } = req.user;
-    try {
-        await req.db.query(
-            'DELETE FROM saved_views WHERE id = $1 AND user_id = $2',
-            [req.params.viewId, userId]
-        );
-        res.json({ success: true });
-    } catch (err) {
-        console.error('Delete view error:', err);
-        res.status(500).json({ error: 'Server error deleting view' });
     }
 });
 
