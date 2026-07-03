@@ -659,3 +659,21 @@ html.dark .notif-item.unread { background: rgba(59,130,246,0.1); }
 .w-full { width: 100%; }
 .hidden { display: none !important; }
 .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ── Admin sidebar variables ── */
+[data-theme="light"] {
+  --bg-sidebar: #f8f9fa;
+  --bg-table-head: #f1f3f5;
+  --bg-input: #ffffff;
+  --accent-light: #e8f4fd;
+  --accent-hover: #2471a3;
+  --header-bg: #ffffff;
+}
+[data-theme="dark"] {
+  --bg-sidebar: #1a1d23;
+  --bg-table-head: #1e2128;
+  --bg-input: #2a2d35;
+  --accent-light: #1a3a5c;
+  --accent-hover: #5dade2;
+  --header-bg: #16181e;
+}

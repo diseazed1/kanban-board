@@ -1,661 +1,1723 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Kanban Board</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Syllego/StratoSense Kanban Board</title>
 <link rel="stylesheet" href="/theme.css"/>
 <style>
-.board-toolbar{display:flex;align-items:center;gap:.5rem;padding:.65rem 1.5rem;background:var(--bg-surface);border-bottom:1px solid var(--border-color);flex-wrap:wrap;transition:background var(--transition)}
-.board-toolbar input[type="search"]{width:220px;padding:.4rem .75rem}
-.board-toolbar select{width:auto;padding:.4rem .65rem}
-.saved-views-bar{display:flex;align-items:center;gap:.4rem;padding:.45rem 1.5rem;background:var(--bg-surface-alt);border-bottom:1px solid var(--border-color);flex-wrap:wrap;min-height:40px;transition:background var(--transition)}
-.saved-views-bar .views-label{font-size:.75rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px;margin-right:.25rem}
-.view-chip{display:inline-flex;align-items:center;gap:.3rem;padding:.2rem .6rem;background:var(--bg-surface);border:1px solid var(--border-color);border-radius:999px;font-size:.78rem;cursor:pointer;transition:background var(--transition),border-color var(--transition)}
-.view-chip:hover{background:var(--brand-light);border-color:var(--brand-primary)}
-html.dark .view-chip:hover{background:rgba(59,130,246,.12)}
-.view-chip .del{color:var(--text-muted);font-size:.7rem;margin-left:.1rem}
-.view-chip .del:hover{color:var(--color-danger)}
-.board-container{display:flex;gap:1rem;padding:1rem 1.5rem;overflow-x:auto;flex:1;align-items:flex-start;min-height:0}
-.kanban-column{background:var(--bg-column);border-radius:var(--border-radius);min-width:280px;max-width:280px;display:flex;flex-direction:column;max-height:calc(100vh - 210px);transition:background var(--transition)}
-.kanban-column.drag-over-col{outline:2px dashed var(--brand-primary)}
-.col-header{padding:.75rem .9rem .5rem;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
-.col-title{font-weight:700;font-size:.875rem;color:var(--text-primary)}
-.col-count{background:var(--bg-surface);color:var(--text-secondary);font-size:.72rem;font-weight:700;padding:.1rem .45rem;border-radius:999px;min-width:20px;text-align:center}
-.col-wip-warn{color:var(--color-danger);font-size:.7rem;font-weight:600}
-.cards-list{flex:1;overflow-y:auto;padding:.4rem .6rem .6rem;display:flex;flex-direction:column;gap:.5rem;min-height:60px}
-.kanban-card{background:var(--bg-surface);border-radius:var(--border-radius);padding:.75rem;box-shadow:var(--shadow-card);border-left:4px solid transparent;cursor:grab;transition:box-shadow var(--transition),transform var(--transition),background var(--transition);position:relative;user-select:none}
-.kanban-card:hover{box-shadow:var(--shadow-md);transform:translateY(-1px)}
-.kanban-card.dragging{opacity:.5;cursor:grabbing}
-.kanban-card.drag-over{outline:2px dashed var(--brand-primary);outline-offset:2px}
-.kanban-card[data-priority="critical"]{border-left-color:var(--priority-critical)}
-.kanban-card[data-priority="high"]{border-left-color:var(--priority-high)}
-.kanban-card[data-priority="medium"]{border-left-color:var(--priority-medium)}
-.kanban-card[data-priority="low"]{border-left-color:var(--priority-low)}
-.kanban-card[data-priority="minimal"]{border-left-color:var(--priority-minimal)}
-.card-title{font-size:.875rem;font-weight:600;color:var(--text-primary);margin-bottom:.35rem;line-height:1.3}
-.card-desc{font-size:.78rem;color:var(--text-secondary);margin-bottom:.4rem;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
-.card-meta{display:flex;flex-wrap:wrap;gap:.3rem;align-items:center;margin-bottom:.4rem}
-.card-labels{display:flex;flex-wrap:wrap;gap:.25rem;margin-bottom:.35rem}
-.card-footer{display:flex;align-items:center;justify-content:space-between;gap:.3rem}
-.card-assignee{font-size:.72rem;color:var(--text-muted)}
-.card-actions{display:flex;gap:.25rem;opacity:0;transition:opacity var(--transition)}
-.kanban-card:hover .card-actions{opacity:1}
-.card-action-btn{background:none;border:none;cursor:pointer;font-size:.8rem;padding:.15rem .3rem;border-radius:3px;color:var(--text-muted);transition:background var(--transition),color var(--transition)}
-.card-action-btn:hover{background:var(--bg-surface-alt);color:var(--text-primary)}
-.card-action-btn.danger:hover{background:#fef2f2;color:var(--color-danger)}
-html.dark .card-action-btn.danger:hover{background:rgba(220,38,38,.15)}
-.progress-bar-wrap{background:var(--border-color);border-radius:999px;height:4px;flex:1;min-width:40px}
-.progress-bar-fill{background:var(--color-success);height:4px;border-radius:999px;transition:width .3s}
-.add-column-btn{min-width:200px;height:48px;background:var(--bg-column);border:2px dashed var(--border-color);border-radius:var(--border-radius);color:var(--text-muted);font-size:.875rem;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:.4rem;transition:background var(--transition),border-color var(--transition),color var(--transition);flex-shrink:0;align-self:flex-start}
-.add-column-btn:hover{background:var(--bg-column-hover);border-color:var(--brand-primary);color:var(--brand-primary)}
-.label-chip{display:inline-flex;align-items:center;padding:.1rem .45rem;border-radius:999px;font-size:.68rem;font-weight:600;color:#fff;white-space:nowrap}
-.detail-panel{position:fixed;top:56px;right:-520px;width:500px;height:calc(100vh - 56px);background:var(--bg-surface);border-left:1px solid var(--border-color);box-shadow:var(--shadow-lg);z-index:95;display:flex;flex-direction:column;transition:right .3s ease,background var(--transition);overflow:hidden}
-.detail-panel.open{right:0}
-.detail-panel-header{padding:1rem 1.25rem;border-bottom:1px solid var(--border-color);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
-.detail-panel-body{flex:1;overflow-y:auto;padding:1rem 1.25rem;display:flex;flex-direction:column;gap:1rem}
-.comment-item{padding:.6rem 0;border-bottom:1px solid var(--border-color);font-size:.85rem}
-.comment-item:last-child{border-bottom:none}
-.comment-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:.25rem}
-.comment-author{font-weight:600;font-size:.8rem;color:var(--brand-primary)}
-.comment-time{font-size:.72rem;color:var(--text-muted)}
-.comment-body{color:var(--text-primary);line-height:1.5;white-space:pre-wrap}
-.comment-body .mention{color:var(--brand-primary);font-weight:600}
-.activity-item{display:flex;gap:.6rem;font-size:.8rem;padding:.4rem 0;border-bottom:1px solid var(--border-color)}
-.activity-item:last-child{border-bottom:none}
-.activity-dot{width:8px;height:8px;border-radius:50%;background:var(--brand-primary);margin-top:5px;flex-shrink:0}
-.activity-text{color:var(--text-primary)}
-.activity-time{color:var(--text-muted);font-size:.72rem}
-.archive-overlay{position:fixed;inset:0;background:var(--bg-overlay);z-index:98;display:none;align-items:flex-start;justify-content:center;padding-top:80px}
-.archive-overlay.open{display:flex}
-.archive-box{background:var(--bg-surface);border:1px solid var(--border-color);border-radius:var(--border-radius-lg);width:90%;max-width:700px;max-height:70vh;display:flex;flex-direction:column;box-shadow:var(--shadow-lg);overflow:hidden}
-.archive-box-header{padding:1rem 1.25rem;border-bottom:1px solid var(--border-color);display:flex;align-items:center;justify-content:space-between;font-weight:600;flex-shrink:0}
-.archive-list{flex:1;overflow-y:auto}
-.archive-item{display:flex;align-items:center;justify-content:space-between;padding:.75rem 1.25rem;border-bottom:1px solid var(--border-color);font-size:.875rem;gap:.75rem}
-.archive-item:last-child{border-bottom:none}
-.archive-item-title{font-weight:600;flex:1}
-.archive-item-meta{font-size:.75rem;color:var(--text-muted)}
-.label-picker{display:flex;flex-wrap:wrap;gap:.4rem}
-.label-option{display:inline-flex;align-items:center;padding:.25rem .6rem;border-radius:999px;font-size:.78rem;font-weight:600;color:#fff;cursor:pointer;opacity:.45;transition:opacity var(--transition),transform var(--transition);user-select:none}
-.label-option.selected{opacity:1;transform:scale(1.05)}
-.label-option:hover{opacity:.8}
-.subtask-item{display:flex;align-items:center;gap:.5rem;padding:.35rem 0;border-bottom:1px solid var(--border-color);font-size:.85rem}
+/* ── Layout ── */
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;transition:background .2s,color .2s}
+
+/* ── Login Screen ── */
+#loginScreen{display:flex;align-items:center;justify-content:center;min-height:100vh;background:var(--bg)}
+.login-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:2.5rem;width:100%;max-width:400px;box-shadow:0 4px 24px rgba(0,0,0,.12)}
+.login-card h1{font-size:1.4rem;font-weight:700;margin-bottom:.25rem;color:var(--text)}
+.login-card .subtitle{font-size:.85rem;color:var(--text-muted);margin-bottom:1.5rem}
+.form-group{margin-bottom:1rem}
+.form-group label{display:block;font-size:.8rem;font-weight:600;margin-bottom:.35rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em}
+.form-group input,.form-group select,.form-group textarea{width:100%;padding:.6rem .75rem;border:1px solid var(--border);border-radius:6px;background:var(--input-bg);color:var(--text);font-size:.9rem;transition:border-color .15s}
+.form-group input:focus,.form-group select:focus,.form-group textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow)}
+.btn{display:inline-flex;align-items:center;gap:.4rem;padding:.55rem 1.1rem;border:none;border-radius:6px;font-size:.85rem;font-weight:600;cursor:pointer;transition:opacity .15s,transform .1s}
+.btn:active{transform:scale(.97)}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-secondary{background:var(--surface-alt);color:var(--text);border:1px solid var(--border)}
+.btn-danger{background:#e53e3e;color:#fff}
+.btn-warning{background:#d69e2e;color:#fff}
+.btn-success{background:#38a169;color:#fff}
+.btn-sm{padding:.35rem .7rem;font-size:.78rem}
+.btn-full{width:100%;justify-content:center}
+.error-msg{color:#e53e3e;font-size:.82rem;margin-top:.5rem;display:none}
+
+/* ── App Shell ── */
+#appShell{display:none;flex-direction:column;height:100vh;overflow:hidden}
+header{background:var(--surface);border-bottom:1px solid var(--border);padding:.6rem 1.2rem;display:flex;align-items:center;gap:.75rem;flex-shrink:0;flex-wrap:wrap}
+.header-brand{font-size:1rem;font-weight:700;color:var(--accent);white-space:nowrap;flex:1}
+.header-brand span{color:var(--text-muted);font-weight:400;font-size:.8rem;margin-left:.4rem}
+.header-actions{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
+
+/* ── Board Selector ── */
+#boardSelector{padding:.3rem .6rem;border:1px solid var(--border);border-radius:6px;background:var(--input-bg);color:var(--text);font-size:.82rem;max-width:180px}
+
+/* ── Toolbar ── */
+.toolbar{background:var(--surface);border-bottom:1px solid var(--border);padding:.5rem 1.2rem;display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;flex-shrink:0}
+.toolbar input[type=text]{padding:.4rem .7rem;border:1px solid var(--border);border-radius:6px;background:var(--input-bg);color:var(--text);font-size:.82rem;min-width:180px}
+.toolbar select{padding:.4rem .6rem;border:1px solid var(--border);border-radius:6px;background:var(--input-bg);color:var(--text);font-size:.82rem}
+.saved-views{display:flex;gap:.4rem;flex-wrap:wrap;align-items:center}
+.view-chip{padding:.25rem .65rem;border-radius:20px;background:var(--surface-alt);border:1px solid var(--border);font-size:.75rem;cursor:pointer;transition:background .15s}
+.view-chip:hover,.view-chip.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.view-chip-del{margin-left:.3rem;opacity:.6;font-size:.7rem}
+.view-chip-del:hover{opacity:1;color:#e53e3e}
+
+/* ── Board ── */
+.board-wrap{flex:1;overflow-x:auto;overflow-y:hidden;padding:1rem 1.2rem;display:flex;gap:1rem;align-items:flex-start}
+.column{background:var(--surface);border:1px solid var(--border);border-radius:10px;width:280px;min-width:280px;display:flex;flex-direction:column;max-height:calc(100vh - 160px)}
+.column-header{padding:.75rem 1rem;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);flex-shrink:0}
+.column-name{font-weight:700;font-size:.9rem}
+.column-meta{display:flex;align-items:center;gap:.4rem}
+.card-count{background:var(--surface-alt);border:1px solid var(--border);border-radius:12px;padding:.1rem .5rem;font-size:.72rem;font-weight:600}
+.wip-badge{font-size:.7rem;padding:.1rem .4rem;border-radius:10px;font-weight:700}
+.wip-ok{background:#c6f6d5;color:#276749}
+.wip-warn{background:#fefcbf;color:#744210}
+.wip-over{background:#fed7d7;color:#9b2c2c}
+.column-cards{flex:1;overflow-y:auto;padding:.5rem;display:flex;flex-direction:column;gap:.5rem;min-height:60px}
+.column-cards.drag-over{background:var(--accent-glow);border-radius:6px}
+.column-footer{padding:.5rem;border-top:1px solid var(--border);flex-shrink:0}
+
+/* ── Cards ── */
+.card{background:var(--card-bg);border:1px solid var(--border);border-radius:8px;padding:.65rem .75rem;cursor:grab;position:relative;transition:box-shadow .15s,opacity .15s;border-left:4px solid transparent}
+.card:hover{box-shadow:0 2px 12px rgba(0,0,0,.12)}
+.card.dragging{opacity:.4;cursor:grabbing}
+.card.drag-placeholder{border:2px dashed var(--accent);background:var(--accent-glow);min-height:60px;border-radius:8px}
+.card.archived-card{opacity:.55;filter:grayscale(.4)}
+.card.is-blocked{border-left-color:#e53e3e!important}
+.card-title{font-weight:600;font-size:.85rem;margin-bottom:.35rem;line-height:1.3}
+.card-title.editing{outline:none;border-bottom:1px dashed var(--accent);cursor:text}
+.card-meta{display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;font-size:.72rem;color:var(--text-muted)}
+.card-labels{display:flex;gap:.25rem;flex-wrap:wrap;margin-bottom:.3rem}
+.label-chip{padding:.1rem .45rem;border-radius:10px;font-size:.68rem;font-weight:600;color:#fff}
+.priority-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.due-badge{padding:.1rem .4rem;border-radius:4px;font-size:.68rem;font-weight:600}
+.due-upcoming{background:#fefcbf;color:#744210}
+.due-soon{background:#fed7d7;color:#9b2c2c}
+.due-overdue{background:#e53e3e;color:#fff}
+.subtask-bar{margin-top:.35rem}
+.subtask-progress{height:4px;background:var(--border);border-radius:2px;overflow:hidden}
+.subtask-fill{height:100%;background:var(--accent);border-radius:2px;transition:width .3s}
+.subtask-label{font-size:.68rem;color:var(--text-muted);margin-top:.15rem}
+.card-actions{display:flex;gap:.3rem;margin-top:.4rem}
+.card-time-badge{display:flex;align-items:center;gap:.2rem;font-size:.68rem;color:var(--text-muted)}
+.card-time-badge.running{color:#38a169;font-weight:600}
+.visibility-badge{font-size:.65rem;padding:.1rem .35rem;border-radius:4px;font-weight:600}
+.badge-public{background:#c6f6d5;color:#276749}
+.badge-private{background:#e9d8fd;color:#553c9a}
+.dep-badge{font-size:.65rem;padding:.1rem .35rem;border-radius:4px;background:#fed7d7;color:#9b2c2c;font-weight:600}
+
+/* Priority colors */
+.p-critical{border-left-color:#e53e3e!important}
+.p-high{border-left-color:#ed8936!important}
+.p-medium{border-left-color:#ecc94b!important}
+.p-low{border-left-color:#48bb78!important}
+.p-minimal{border-left-color:#4299e1!important}
+.dot-critical{background:#e53e3e}
+.dot-high{background:#ed8936}
+.dot-medium{background:#ecc94b}
+.dot-low{background:#48bb78}
+.dot-minimal{background:#4299e1}
+
+/* ── Modals ── */
+dialog{border:none;border-radius:12px;padding:0;background:var(--surface);color:var(--text);box-shadow:0 8px 40px rgba(0,0,0,.25);max-width:90vw;width:560px;max-height:90vh;overflow:hidden;display:flex;flex-direction:column}
+dialog::backdrop{background:rgba(0,0,0,.45)}
+.modal-header{padding:1rem 1.25rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.modal-header h2{font-size:1rem;font-weight:700}
+.modal-close{background:none;border:none;font-size:1.3rem;cursor:pointer;color:var(--text-muted);line-height:1}
+.modal-body{padding:1.25rem;overflow-y:auto;flex:1}
+.modal-footer{padding:.75rem 1.25rem;border-top:1px solid var(--border);display:flex;gap:.5rem;justify-content:flex-end;flex-shrink:0}
+
+/* ── Detail Panel ── */
+#detailPanel{position:fixed;top:0;right:-480px;width:480px;height:100vh;background:var(--surface);border-left:1px solid var(--border);box-shadow:-4px 0 24px rgba(0,0,0,.15);transition:right .25s ease;z-index:200;display:flex;flex-direction:column;overflow:hidden}
+#detailPanel.open{right:0}
+.panel-header{padding:1rem 1.25rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.panel-header h3{font-size:.95rem;font-weight:700;flex:1;margin-right:.5rem}
+.panel-tabs{display:flex;border-bottom:1px solid var(--border);flex-shrink:0}
+.panel-tab{flex:1;padding:.6rem;text-align:center;font-size:.78rem;font-weight:600;cursor:pointer;border-bottom:2px solid transparent;color:var(--text-muted);transition:color .15s,border-color .15s}
+.panel-tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+.panel-content{flex:1;overflow-y:auto;padding:1rem}
+.panel-section{margin-bottom:1.25rem}
+.panel-section h4{font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin-bottom:.6rem}
+
+/* ── Activity Feed ── */
+#activityFeed{position:fixed;top:0;right:-400px;width:400px;height:100vh;background:var(--surface);border-left:1px solid var(--border);box-shadow:-4px 0 24px rgba(0,0,0,.15);transition:right .25s ease;z-index:199;display:flex;flex-direction:column}
+#activityFeed.open{right:0}
+.feed-item{padding:.6rem .75rem;border-bottom:1px solid var(--border);font-size:.8rem;display:flex;gap:.5rem;align-items:flex-start}
+.feed-item-icon{width:28px;height:28px;border-radius:50%;background:var(--accent-glow);display:flex;align-items:center;justify-content:center;font-size:.8rem;flex-shrink:0}
+.feed-item-body{flex:1}
+.feed-item-time{font-size:.68rem;color:var(--text-muted)}
+
+/* ── Notifications ── */
+.notif-badge{position:absolute;top:-4px;right:-4px;background:#e53e3e;color:#fff;border-radius:50%;width:16px;height:16px;font-size:.6rem;display:flex;align-items:center;justify-content:center;font-weight:700}
+.notif-item{padding:.65rem .75rem;border-bottom:1px solid var(--border);font-size:.8rem;cursor:pointer;transition:background .15s}
+.notif-item:hover{background:var(--surface-alt)}
+.notif-item.unread{background:var(--accent-glow)}
+.notif-item-time{font-size:.68rem;color:var(--text-muted)}
+
+/* ── Subtask Checklist ── */
+.subtask-item{display:flex;align-items:center;gap:.5rem;padding:.35rem 0;border-bottom:1px solid var(--border)}
 .subtask-item:last-child{border-bottom:none}
-.subtask-item input[type="checkbox"]{width:auto;flex-shrink:0;cursor:pointer}
-.subtask-item.done span{text-decoration:line-through;color:var(--text-muted)}
-.subtask-del{margin-left:auto;background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:.8rem;padding:.1rem .3rem;border-radius:3px}
-.subtask-del:hover{color:var(--color-danger)}
-.attachment-item{display:flex;align-items:center;gap:.5rem;padding:.5rem 0;border-bottom:1px solid var(--border-color);font-size:.85rem}
+.subtask-item input[type=checkbox]{width:15px;height:15px;cursor:pointer;accent-color:var(--accent)}
+.subtask-item label{flex:1;font-size:.82rem;cursor:pointer}
+.subtask-item label.done{text-decoration:line-through;color:var(--text-muted)}
+.subtask-item .del-subtask{background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:.8rem;opacity:.5}
+.subtask-item .del-subtask:hover{opacity:1;color:#e53e3e}
+
+/* ── Time Tracking ── */
+.time-entry{display:flex;align-items:center;justify-content:space-between;padding:.35rem 0;border-bottom:1px solid var(--border);font-size:.8rem}
+.time-entry:last-child{border-bottom:none}
+.time-entry .duration{font-weight:600;color:var(--accent)}
+.timer-controls{display:flex;gap:.5rem;align-items:center;margin-bottom:.75rem}
+.timer-display{font-size:1.4rem;font-weight:700;font-variant-numeric:tabular-nums;color:var(--accent)}
+
+/* ── Dependencies ── */
+.dep-card-item{display:flex;align-items:center;justify-content:space-between;padding:.35rem 0;border-bottom:1px solid var(--border);font-size:.8rem}
+.dep-card-item:last-child{border-bottom:none}
+
+/* ── Comments ── */
+.comment-item{padding:.6rem 0;border-bottom:1px solid var(--border)}
+.comment-item:last-child{border-bottom:none}
+.comment-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:.3rem}
+.comment-author{font-weight:600;font-size:.8rem}
+.comment-time{font-size:.68rem;color:var(--text-muted)}
+.comment-body{font-size:.82rem;line-height:1.5;white-space:pre-wrap}
+.mention{color:var(--accent);font-weight:600}
+
+/* ── Activity Timeline ── */
+.activity-item{display:flex;gap:.6rem;padding:.5rem 0;border-bottom:1px solid var(--border);font-size:.8rem}
+.activity-item:last-child{border-bottom:none}
+.activity-icon{width:24px;height:24px;border-radius:50%;background:var(--surface-alt);display:flex;align-items:center;justify-content:center;font-size:.7rem;flex-shrink:0}
+.activity-body{flex:1}
+.activity-time{font-size:.68rem;color:var(--text-muted)}
+
+/* ── Attachments ── */
+.attachment-item{display:flex;align-items:center;gap:.5rem;padding:.4rem 0;border-bottom:1px solid var(--border);font-size:.82rem}
 .attachment-item:last-child{border-bottom:none}
-.attachment-name{flex:1;color:var(--brand-primary);cursor:pointer}
-.attachment-name:hover{text-decoration:underline}
-.attachment-size{color:var(--text-muted);font-size:.75rem}
-#login-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;background:var(--bg-page)}
-.login-card{background:var(--bg-surface);border:1px solid var(--border-color);border-radius:var(--border-radius-lg);padding:2.5rem 2rem;width:100%;max-width:380px;box-shadow:var(--shadow-lg)}
-.login-card h1{font-size:1.5rem;font-weight:800;margin-bottom:.25rem}
-.login-card p{color:var(--text-muted);font-size:.875rem;margin-bottom:1.5rem}
-.login-error{color:var(--color-danger);font-size:.82rem;margin-top:.5rem;display:none}
-#board-screen{display:none;flex-direction:column;height:100vh;overflow:hidden}
+.attachment-icon{font-size:1.1rem}
+.attachment-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.attachment-size{font-size:.7rem;color:var(--text-muted)}
+
+/* ── Analytics Modal ── */
+.analytics-grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem}
+.stat-card{background:var(--surface-alt);border:1px solid var(--border);border-radius:8px;padding:.75rem 1rem;text-align:center}
+.stat-card .stat-value{font-size:1.8rem;font-weight:700;color:var(--accent)}
+.stat-card .stat-label{font-size:.75rem;color:var(--text-muted);margin-top:.2rem}
+.chart-bar-row{display:flex;align-items:center;gap:.5rem;margin-bottom:.4rem;font-size:.78rem}
+.chart-bar-label{width:90px;text-align:right;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chart-bar-track{flex:1;height:14px;background:var(--border);border-radius:4px;overflow:hidden}
+.chart-bar-fill{height:100%;border-radius:4px;background:var(--accent);transition:width .5s}
+.chart-bar-val{width:30px;font-weight:600;flex-shrink:0}
+
+/* ── Keyboard Shortcut Overlay ── */
+#shortcutOverlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1000;align-items:center;justify-content:center}
+#shortcutOverlay.show{display:flex}
+.shortcut-box{background:var(--surface);border-radius:12px;padding:1.5rem;min-width:320px;max-width:480px}
+.shortcut-box h3{font-size:1rem;font-weight:700;margin-bottom:1rem;text-align:center}
+.shortcut-row{display:flex;justify-content:space-between;align-items:center;padding:.35rem 0;border-bottom:1px solid var(--border);font-size:.82rem}
+.shortcut-row:last-child{border-bottom:none}
+kbd{background:var(--surface-alt);border:1px solid var(--border);border-radius:4px;padding:.1rem .4rem;font-size:.75rem;font-family:monospace}
+
+/* ── Priority Legend ── */
+.priority-legend{display:flex;gap:.75rem;flex-wrap:wrap;font-size:.72rem;color:var(--text-muted);padding:.4rem 1.2rem;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0}
+.legend-item{display:flex;align-items:center;gap:.3rem}
+
+/* ── Archived Banner ── */
+.archived-banner{background:#fef3cd;border:1px solid #ffc107;border-radius:6px;padding:.4rem .75rem;font-size:.78rem;color:#856404;margin-bottom:.5rem;display:none}
+.archived-banner.show{display:block}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+
+/* ── Responsive ── */
+@media(max-width:640px){
+  .board-wrap{padding:.5rem}
+  .column{min-width:260px;width:260px}
+  header{padding:.5rem .75rem}
+  .header-brand span{display:none}
+  #detailPanel{width:100vw}
+  #activityFeed{width:100vw}
+}
 </style>
 </head>
 <body>
 
-<div id="login-screen">
+<!-- ══════════════════════════════════════════════════════════════
+     LOGIN SCREEN
+══════════════════════════════════════════════════════════════ -->
+<div id="loginScreen">
   <div class="login-card">
-    <h1>Kanban Board</h1>
-    <p>Sign in to your workspace</p>
-    <form id="login-form" style="display:flex;flex-direction:column;gap:.75rem;">
-      <div class="form-group"><label for="login-username">Username</label><input id="login-username" type="text" autocomplete="username" placeholder="Enter username" required/></div>
-      <div class="form-group"><label for="login-password">Password</label><input id="login-password" type="password" autocomplete="current-password" placeholder="Enter password" required/></div>
-      <button type="submit" class="btn btn-primary w-full" style="margin-top:.25rem;">Sign In</button>
-      <div id="login-error" class="login-error"></div>
-    </form>
+    <h1>Syllego/StratoSense</h1>
+    <p class="subtitle">Kanban Board — Sign in to continue</p>
+    <div class="form-group">
+      <label>Username</label>
+      <input type="text" id="loginUser" autocomplete="username" placeholder="Enter username"/>
+    </div>
+    <div class="form-group">
+      <label>Password</label>
+      <input type="password" id="loginPass" autocomplete="current-password" placeholder="Enter password"/>
+    </div>
+    <p class="error-msg" id="loginError"></p>
+    <button class="btn btn-primary btn-full" id="loginBtn" style="margin-top:.75rem">Sign In</button>
   </div>
 </div>
 
-<div id="board-screen">
-  <header class="app-header">
-    <div class="logo">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="7" height="18" rx="1"/><rect x="14" y="3" width="7" height="11" rx="1"/><rect x="14" y="18" width="7" height="3" rx="1"/></svg>
-      Kanban Board
+<!-- ══════════════════════════════════════════════════════════════
+     APP SHELL
+══════════════════════════════════════════════════════════════ -->
+<div id="appShell">
+
+  <!-- Header -->
+  <header>
+    <div class="header-brand">
+      Syllego/StratoSense <span>Kanban Board</span>
     </div>
+    <select id="boardSelector" title="Switch board"></select>
     <div class="header-actions">
-      <div class="notif-wrapper" id="notif-wrapper">
-        <button class="btn-icon" id="notif-btn" title="Notifications (N)">🔔</button>
-        <span class="notif-badge hidden" id="notif-badge">0</span>
-        <div class="notif-dropdown" id="notif-dropdown">
-          <div class="notif-dropdown-header"><span>Notifications</span><button class="btn btn-secondary" style="padding:.2rem .5rem;font-size:.75rem;" id="mark-all-read-btn">Mark all read</button></div>
-          <div class="notif-list" id="notif-list"><div class="notif-empty">No notifications</div></div>
-        </div>
+      <button class="btn btn-secondary btn-sm" id="analyticsBtn" title="Analytics">📊 Analytics</button>
+      <button class="btn btn-secondary btn-sm" id="activityFeedBtn" title="Board Activity Feed (A)">📡 Feed</button>
+      <div style="position:relative">
+        <button class="btn btn-secondary btn-sm" id="notifBtn" title="Notifications">🔔</button>
+        <span class="notif-badge" id="notifBadge" style="display:none">0</span>
       </div>
-      <button class="btn-icon" id="feed-toggle-btn" title="Activity Feed (A)">📋</button>
-      <button class="btn-icon" id="archive-btn" title="View Archive">🗄️</button>
-      <button class="btn-icon" id="export-csv-btn" title="Export to CSV">⬇️</button>
-      <button class="btn-icon" id="theme-toggle-btn" title="Toggle Dark Mode (D)">🌙</button>
-      <button class="btn btn-ghost" id="change-pw-btn">🔑 Password</button>
-      <a href="/admin.html" class="btn btn-ghost hidden" id="admin-link">⚙️ Admin</a>
-      <button class="btn btn-primary" id="new-card-btn" title="New Card (C)">+ New Card</button>
-      <button class="btn btn-ghost" id="logout-btn">Sign Out</button>
+      <button class="btn btn-warning btn-sm" id="changePwBtn">🔑 Password</button>
+      <button class="btn btn-secondary btn-sm" id="themeToggle" title="Toggle dark/light mode (D)">🌙</button>
+      <button class="btn btn-secondary btn-sm" id="shortcutBtn" title="Keyboard shortcuts (?)">⌨️</button>
+      <span id="userLabel" style="font-size:.8rem;color:var(--text-muted)"></span>
+      <a id="adminLink" href="/admin.html" class="btn btn-secondary btn-sm" style="display:none">⚙️ Admin</a>
+      <button class="btn btn-danger btn-sm" id="logoutBtn">Sign Out</button>
     </div>
   </header>
 
+  <!-- Priority Legend -->
   <div class="priority-legend">
-    <span>Priority:</span>
-    <span class="badge badge-critical">● Critical</span>
-    <span class="badge badge-high">● High</span>
-    <span class="badge badge-medium">● Medium</span>
-    <span class="badge badge-low">● Low</span>
-    <span class="badge badge-minimal">● Minimal</span>
-    <span style="margin-left:auto;font-size:.72rem;color:var(--text-muted)">Press <kbd style="background:var(--bg-surface-alt);border:1px solid var(--border-color);border-radius:3px;padding:0 4px;font-family:monospace">?</kbd> for shortcuts</span>
+    <span style="font-weight:600;color:var(--text)">Priority:</span>
+    <span class="legend-item"><span class="priority-dot dot-critical"></span>Critical</span>
+    <span class="legend-item"><span class="priority-dot dot-high"></span>High</span>
+    <span class="legend-item"><span class="priority-dot dot-medium"></span>Medium</span>
+    <span class="legend-item"><span class="priority-dot dot-low"></span>Low</span>
+    <span class="legend-item"><span class="priority-dot dot-minimal"></span>Minimal</span>
   </div>
 
-  <div class="board-toolbar">
-    <input type="search" id="search-input" placeholder="🔍 Search cards…" title="Search (F)"/>
-    <select id="filter-priority"><option value="">All Priorities</option><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option><option value="minimal">Minimal</option></select>
-    <select id="filter-assignee"><option value="">All Assignees</option></select>
-    <select id="filter-label"><option value="">All Labels</option></select>
-    <button class="btn btn-secondary" id="save-view-btn">💾 Save View</button>
-    <button class="btn btn-secondary" id="clear-filters-btn">✕ Clear</button>
+  <!-- Toolbar -->
+  <div class="toolbar">
+    <input type="text" id="searchInput" placeholder="🔍 Search cards…" title="Search (F)"/>
+    <select id="filterPriority">
+      <option value="">All Priorities</option>
+      <option value="critical">Critical</option>
+      <option value="high">High</option>
+      <option value="medium">Medium</option>
+      <option value="low">Low</option>
+      <option value="minimal">Minimal</option>
+    </select>
+    <select id="filterAssignee"><option value="">All Assignees</option></select>
+    <select id="filterLabel"><option value="">All Labels</option></select>
+    <button class="btn btn-secondary btn-sm" id="saveViewBtn">💾 Save View</button>
+    <button class="btn btn-secondary btn-sm" id="exportCsvBtn">📥 Export CSV</button>
+    <label style="font-size:.8rem;display:flex;align-items:center;gap:.3rem;cursor:pointer">
+      <input type="checkbox" id="showArchived"/> Show Archived
+    </label>
+    <div class="saved-views" id="savedViews"></div>
   </div>
 
-  <div class="saved-views-bar" id="saved-views-bar">
-    <span class="views-label">Views:</span>
-    <span id="saved-views-list"></span>
-  </div>
+  <!-- Board -->
+  <div class="board-wrap" id="boardWrap"></div>
 
-  <div class="board-container" id="board-container"></div>
 </div>
 
-<!-- Activity Feed Panel -->
-<div class="feed-panel" id="feed-panel">
-  <div class="feed-panel-header"><span>Activity Feed</span><button class="modal-close" id="feed-close-btn">×</button></div>
-  <div class="feed-panel-body" id="feed-list"><div class="feed-empty">No activity yet.</div></div>
+<!-- ══════════════════════════════════════════════════════════════
+     DETAIL PANEL (slide-in from right)
+══════════════════════════════════════════════════════════════ -->
+<div id="detailPanel">
+  <div class="panel-header">
+    <h3 id="detailTitle">Card Details</h3>
+    <button class="modal-close" id="closeDetail">✕</button>
+  </div>
+  <div class="panel-tabs">
+    <div class="panel-tab active" data-tab="info">Info</div>
+    <div class="panel-tab" data-tab="subtasks">Subtasks</div>
+    <div class="panel-tab" data-tab="comments">Comments</div>
+    <div class="panel-tab" data-tab="time">Time</div>
+    <div class="panel-tab" data-tab="deps">Deps</div>
+    <div class="panel-tab" data-tab="attachments">Files</div>
+    <div class="panel-tab" data-tab="activity">History</div>
+  </div>
+  <div class="panel-content" id="detailContent"></div>
 </div>
 
-<!-- Card Detail Panel -->
-<div class="detail-panel" id="detail-panel">
-  <div class="detail-panel-header"><strong id="detail-title">Card Details</strong><button class="modal-close" id="detail-close-btn">×</button></div>
-  <div class="detail-panel-body">
-    <div class="tabs">
-      <button class="tab-btn active" data-tab="comments">💬 Comments</button>
-      <button class="tab-btn" data-tab="subtasks">✅ Subtasks</button>
-      <button class="tab-btn" data-tab="attachments">📎 Attachments</button>
-      <button class="tab-btn" data-tab="activity">📜 Activity</button>
-    </div>
-    <div class="tab-pane active" id="tab-comments">
-      <div id="comments-list" style="margin-bottom:.75rem;"></div>
-      <div class="form-group"><textarea id="comment-input" placeholder="Write a comment… use @username to mention" rows="3"></textarea></div>
-      <button class="btn btn-primary" id="post-comment-btn" style="margin-top:.5rem;">Post Comment</button>
-    </div>
-    <div class="tab-pane" id="tab-subtasks">
-      <div id="subtasks-list" style="margin-bottom:.75rem;"></div>
-      <div style="display:flex;gap:.5rem;margin-top:.5rem;"><input id="subtask-input" type="text" placeholder="Add subtask…" style="flex:1;"/><button class="btn btn-primary" id="add-subtask-btn">Add</button></div>
-    </div>
-    <div class="tab-pane" id="tab-attachments">
-      <div id="attachments-list" style="margin-bottom:.75rem;"></div>
-      <div class="form-group" style="margin-top:.5rem;"><label>Upload File (max 10 MB)</label><input type="file" id="attachment-input" style="padding:.3rem;"/></div>
-      <button class="btn btn-primary" id="upload-attachment-btn" style="margin-top:.5rem;">Upload</button>
-    </div>
-    <div class="tab-pane" id="tab-activity"><div id="activity-list"></div></div>
+<!-- ══════════════════════════════════════════════════════════════
+     BOARD ACTIVITY FEED (slide-in from right, behind detail panel)
+══════════════════════════════════════════════════════════════ -->
+<div id="activityFeed">
+  <div class="panel-header">
+    <h3>Board Activity Feed</h3>
+    <button class="modal-close" id="closeFeed">✕</button>
   </div>
+  <div style="flex:1;overflow-y:auto" id="feedList"></div>
 </div>
 
-<!-- Archive Overlay -->
-<div class="archive-overlay" id="archive-overlay">
-  <div class="archive-box">
-    <div class="archive-box-header"><span>🗄️ Archived Cards</span><button class="modal-close" id="archive-close-btn">×</button></div>
-    <div class="archive-list" id="archive-list"><div style="padding:1.5rem;text-align:center;color:var(--text-muted);">No archived cards.</div></div>
+<!-- ══════════════════════════════════════════════════════════════
+     NOTIFICATIONS PANEL
+══════════════════════════════════════════════════════════════ -->
+<dialog id="notifModal">
+  <div class="modal-header">
+    <h2>🔔 Notifications</h2>
+    <button class="modal-close" id="closeNotif">✕</button>
   </div>
-</div>
-
-<!-- Keyboard Shortcuts Overlay -->
-<div id="shortcuts-overlay">
-  <div class="shortcuts-box">
-    <h2>⌨️ Keyboard Shortcuts</h2>
-    <div class="shortcut-grid">
-      <div class="shortcut-row"><span>New Card</span><span class="key">C</span></div>
-      <div class="shortcut-row"><span>Search</span><span class="key">F</span></div>
-      <div class="shortcut-row"><span>Notifications</span><span class="key">N</span></div>
-      <div class="shortcut-row"><span>Activity Feed</span><span class="key">A</span></div>
-      <div class="shortcut-row"><span>Toggle Dark Mode</span><span class="key">D</span></div>
-      <div class="shortcut-row"><span>Close Panel</span><span class="key">Esc</span></div>
-      <div class="shortcut-row"><span>This Help</span><span class="key">?</span></div>
-    </div>
-    <button class="btn btn-secondary w-full" style="margin-top:1.2rem;" id="close-shortcuts-btn">Close</button>
+  <div class="modal-body" id="notifList" style="padding:0;max-height:420px;overflow-y:auto"></div>
+  <div class="modal-footer">
+    <button class="btn btn-secondary btn-sm" id="markAllReadBtn">Mark All Read</button>
   </div>
-</div>
-
-<!-- New/Edit Card Modal -->
-<dialog id="card-modal">
-  <div class="modal-header"><h2 id="card-modal-title">New Card</h2><button class="modal-close" id="card-modal-close">×</button></div>
-  <div class="modal-body">
-    <div class="form-group"><label for="card-title-input">Title *</label><input id="card-title-input" type="text" placeholder="Card title" maxlength="200" required/></div>
-    <div class="form-group"><label for="card-desc-input">Description</label><textarea id="card-desc-input" placeholder="Optional description…" rows="3"></textarea></div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;">
-      <div class="form-group"><label for="card-priority-select">Priority</label><select id="card-priority-select"><option value="critical">🔴 Critical</option><option value="high">🟠 High</option><option value="medium" selected>🟡 Medium</option><option value="low">🟢 Low</option><option value="minimal">🔵 Minimal</option></select></div>
-      <div class="form-group"><label for="card-column-select">Column *</label><select id="card-column-select"></select></div>
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;">
-      <div class="form-group"><label for="card-assignee-select">Assignee</label><select id="card-assignee-select"><option value="">Unassigned</option></select></div>
-      <div class="form-group"><label for="card-due-input">Due Date</label><input id="card-due-input" type="datetime-local"/></div>
-    </div>
-    <div class="form-group"><label for="card-visibility-select">Visibility</label><select id="card-visibility-select"><option value="public">🌐 Public</option><option value="private">🔒 Private</option></select></div>
-    <div class="form-group"><label>Labels</label><div class="label-picker" id="card-label-picker"></div></div>
-    <div id="card-modal-no-columns" class="hidden" style="color:var(--color-warning);font-size:.85rem;padding:.5rem;background:var(--bg-surface-alt);border-radius:4px;">⚠️ No columns exist yet. An admin must create columns first.</div>
-  </div>
-  <div class="modal-footer"><button class="btn btn-secondary" id="card-modal-cancel">Cancel</button><button class="btn btn-primary" id="card-modal-save">Save Card</button></div>
 </dialog>
 
-<!-- Change Password Modal -->
-<dialog id="pw-modal">
-  <div class="modal-header"><h2>Change Password</h2><button class="modal-close" id="pw-modal-close">×</button></div>
-  <div class="modal-body">
-    <div class="form-group"><label for="pw-current">Current Password</label><input id="pw-current" type="password" autocomplete="current-password"/></div>
-    <div class="form-group"><label for="pw-new">New Password (min 8 chars)</label><input id="pw-new" type="password" autocomplete="new-password"/></div>
-    <div class="form-group"><label for="pw-confirm">Confirm New Password</label><input id="pw-confirm" type="password" autocomplete="new-password"/></div>
-    <div id="pw-error" style="color:var(--color-danger);font-size:.82rem;display:none;"></div>
+<!-- ══════════════════════════════════════════════════════════════
+     NEW / EDIT CARD MODAL
+══════════════════════════════════════════════════════════════ -->
+<dialog id="cardModal">
+  <div class="modal-header">
+    <h2 id="cardModalTitle">New Card</h2>
+    <button class="modal-close" id="closeCardModal">✕</button>
   </div>
-  <div class="modal-footer"><button class="btn btn-secondary" id="pw-modal-cancel">Cancel</button><button class="btn btn-primary" id="pw-modal-save">Update Password</button></div>
+  <div class="modal-body">
+    <div class="form-group">
+      <label>Title *</label>
+      <input type="text" id="cardTitle" placeholder="Card title"/>
+    </div>
+    <div class="form-group">
+      <label>Description</label>
+      <textarea id="cardDesc" rows="3" placeholder="Optional description…"></textarea>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
+      <div class="form-group">
+        <label>Column *</label>
+        <select id="cardColumn"></select>
+      </div>
+      <div class="form-group">
+        <label>Priority</label>
+        <select id="cardPriority">
+          <option value="critical">🔴 Critical</option>
+          <option value="high">🟠 High</option>
+          <option value="medium" selected>🟡 Medium</option>
+          <option value="low">🟢 Low</option>
+          <option value="minimal">🔵 Minimal</option>
+        </select>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
+      <div class="form-group">
+        <label>Assign To</label>
+        <select id="cardAssignee"><option value="">Unassigned</option></select>
+      </div>
+      <div class="form-group">
+        <label>Due Date</label>
+        <input type="datetime-local" id="cardDueDate"/>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
+      <div class="form-group">
+        <label>Visibility</label>
+        <select id="cardVisibility">
+          <option value="public">🌐 Public</option>
+          <option value="private">🔒 Private</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Recurrence</label>
+        <select id="cardRecurrence">
+          <option value="">None</option>
+          <option value="daily">Daily</option>
+          <option value="weekly">Weekly</option>
+          <option value="monthly">Monthly</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Labels</label>
+      <div id="labelPicker" style="display:flex;flex-wrap:wrap;gap:.4rem;padding:.5rem;border:1px solid var(--border);border-radius:6px;min-height:36px"></div>
+    </div>
+    <p class="error-msg" id="cardError"></p>
+  </div>
+  <div class="modal-footer">
+    <button class="btn btn-secondary" id="cancelCardBtn">Cancel</button>
+    <button class="btn btn-primary" id="saveCardBtn">Save Card</button>
+  </div>
 </dialog>
 
-<!-- Add Column Modal -->
-<dialog id="col-modal">
-  <div class="modal-header"><h2>Add Column</h2><button class="modal-close" id="col-modal-close">×</button></div>
-  <div class="modal-body">
-    <div class="form-group"><label for="col-name-input">Column Name *</label><input id="col-name-input" type="text" placeholder="e.g. In Review" maxlength="50"/></div>
-    <div class="form-group"><label for="col-wip-input">WIP Limit (optional)</label><input id="col-wip-input" type="number" min="1" placeholder="Leave blank for unlimited"/></div>
+<!-- ══════════════════════════════════════════════════════════════
+     CHANGE PASSWORD MODAL
+══════════════════════════════════════════════════════════════ -->
+<dialog id="passwordModal">
+  <div class="modal-header">
+    <h2>🔑 Change Password</h2>
+    <button class="modal-close" id="closePasswordModal">✕</button>
   </div>
-  <div class="modal-footer"><button class="btn btn-secondary" id="col-modal-cancel">Cancel</button><button class="btn btn-primary" id="col-modal-save">Add Column</button></div>
+  <div class="modal-body">
+    <div class="form-group">
+      <label>Current Password</label>
+      <input type="password" id="currentPw" autocomplete="current-password"/>
+    </div>
+    <div class="form-group">
+      <label>New Password</label>
+      <input type="password" id="newPw" autocomplete="new-password"/>
+    </div>
+    <div class="form-group">
+      <label>Confirm New Password</label>
+      <input type="password" id="confirmPw" autocomplete="new-password"/>
+    </div>
+    <p class="error-msg" id="pwError"></p>
+  </div>
+  <div class="modal-footer">
+    <button class="btn btn-secondary" id="cancelPwBtn">Cancel</button>
+    <button class="btn btn-primary" id="savePwBtn">Update Password</button>
+  </div>
 </dialog>
 
-<div id="toast-container"></div>
+<!-- ══════════════════════════════════════════════════════════════
+     SAVE VIEW MODAL
+══════════════════════════════════════════════════════════════ -->
+<dialog id="saveViewModal">
+  <div class="modal-header">
+    <h2>💾 Save Filter View</h2>
+    <button class="modal-close" id="closeSaveView">✕</button>
+  </div>
+  <div class="modal-body">
+    <div class="form-group">
+      <label>View Name</label>
+      <input type="text" id="viewName" placeholder="e.g. My High Priority Cards"/>
+    </div>
+  </div>
+  <div class="modal-footer">
+    <button class="btn btn-secondary" id="cancelSaveView">Cancel</button>
+    <button class="btn btn-primary" id="confirmSaveView">Save</button>
+  </div>
+</dialog>
 
+<!-- ══════════════════════════════════════════════════════════════
+     ANALYTICS MODAL
+══════════════════════════════════════════════════════════════ -->
+<dialog id="analyticsModal" style="width:680px;max-width:95vw">
+  <div class="modal-header">
+    <h2>📊 Board Analytics</h2>
+    <button class="modal-close" id="closeAnalytics">✕</button>
+  </div>
+  <div class="modal-body" id="analyticsBody"></div>
+</dialog>
+
+<!-- ══════════════════════════════════════════════════════════════
+     COLUMN MODAL (add/edit)
+══════════════════════════════════════════════════════════════ -->
+<dialog id="columnModal">
+  <div class="modal-header">
+    <h2 id="columnModalTitle">Add Column</h2>
+    <button class="modal-close" id="closeColumnModal">✕</button>
+  </div>
+  <div class="modal-body">
+    <div class="form-group">
+      <label>Column Name *</label>
+      <input type="text" id="columnName" placeholder="e.g. In Review"/>
+    </div>
+    <div class="form-group">
+      <label>WIP Limit <span style="font-weight:400;color:var(--text-muted)">(leave blank for none)</span></label>
+      <input type="number" id="columnWip" min="1" placeholder="e.g. 5"/>
+    </div>
+  </div>
+  <div class="modal-footer">
+    <button class="btn btn-secondary" id="cancelColumnBtn">Cancel</button>
+    <button class="btn btn-primary" id="saveColumnBtn">Save Column</button>
+  </div>
+</dialog>
+
+<!-- ══════════════════════════════════════════════════════════════
+     KEYBOARD SHORTCUT OVERLAY
+══════════════════════════════════════════════════════════════ -->
+<div id="shortcutOverlay">
+  <div class="shortcut-box">
+    <h3>⌨️ Keyboard Shortcuts</h3>
+    <div class="shortcut-row"><span>New card</span><kbd>N</kbd></div>
+    <div class="shortcut-row"><span>Focus search</span><kbd>F</kbd></div>
+    <div class="shortcut-row"><span>Toggle dark mode</span><kbd>D</kbd></div>
+    <div class="shortcut-row"><span>Board activity feed</span><kbd>A</kbd></div>
+    <div class="shortcut-row"><span>Analytics</span><kbd>Shift+A</kbd></div>
+    <div class="shortcut-row"><span>Notifications</span><kbd>B</kbd></div>
+    <div class="shortcut-row"><span>Close panel / modal</span><kbd>Esc</kbd></div>
+    <div class="shortcut-row"><span>This help screen</span><kbd>?</kbd></div>
+    <div style="text-align:center;margin-top:.75rem">
+      <button class="btn btn-secondary btn-sm" onclick="document.getElementById('shortcutOverlay').classList.remove('show')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     JAVASCRIPT
+══════════════════════════════════════════════════════════════ -->
 <script>
 'use strict';
-let currentUser=null,columns=[],cards=[],allUsers=[],allLabels=[],savedViews=[],detailCardId=null,editCardId=null,selectedLabelIds=new Set();
-let filterSearch='',filterPriority='',filterAssignee='',filterLabel='';
-let dragCardId=null;
 
-// Theme
-function applyTheme(dark){document.documentElement.classList.toggle('dark',dark);document.getElementById('theme-toggle-btn').textContent=dark?'☀️':'🌙';localStorage.setItem('theme',dark?'dark':'light')}
-(function(){const s=localStorage.getItem('theme'),p=window.matchMedia('(prefers-color-scheme: dark)').matches;applyTheme(s?s==='dark':p)})();
-document.getElementById('theme-toggle-btn').addEventListener('click',()=>applyTheme(!document.documentElement.classList.contains('dark')));
+// ── State ──────────────────────────────────────────────────────
+let currentUser   = null;
+let currentBoardId = null;
+let columns       = [];
+let allCards      = [];
+let allUsers      = [];
+let allLabels     = [];
+let savedViews    = [];
+let activeFilters = { search:'', priority:'', assignee:'', label:'' };
+let detailCardId  = null;
+let activeDetailTab = 'info';
+let timerInterval = null;
+let timerStarted  = null;
+let dragCard      = null;
+let dragPlaceholder = null;
 
-// Toast
-function toast(msg,type='info'){const el=document.createElement('div');el.className=`toast ${type}`;el.textContent=msg;document.getElementById('toast-container').appendChild(el);setTimeout(()=>el.remove(),3500)}
+// ── Theme ──────────────────────────────────────────────────────
+function initTheme() {
+  const saved = localStorage.getItem('kanban-theme');
+  const pref  = saved || (window.matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'light');
+  setTheme(pref);
+}
+function setTheme(t) {
+  document.documentElement.setAttribute('data-theme', t);
+  localStorage.setItem('kanban-theme', t);
+  document.getElementById('themeToggle').textContent = t === 'dark' ? '☀️' : '🌙';
+}
+function toggleTheme() {
+  const cur = document.documentElement.getAttribute('data-theme');
+  setTheme(cur === 'dark' ? 'light' : 'dark');
+}
+initTheme();
 
-// API
-async function api(method,url,body){
-  const opts={method,credentials:'include',headers:{'Content-Type':'application/json'}};
-  if(body!==undefined)opts.body=JSON.stringify(body);
-  const res=await fetch(url,opts);
-  if(res.status===401){showLogin();return null}
-  if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e.error||`HTTP ${res.status}`)}
-  const ct=res.headers.get('content-type')||'';
-  if(ct.includes('text/csv'))return res;
-  if(res.status===204)return null;
-  return res.json();
+// ── API helper ─────────────────────────────────────────────────
+async function api(method, path, body) {
+  const opts = { method, headers: {}, credentials: 'same-origin' };
+  if (body && !(body instanceof FormData)) {
+    opts.headers['Content-Type'] = 'application/json';
+    opts.body = JSON.stringify(body);
+  } else if (body instanceof FormData) {
+    opts.body = body;
+  }
+  const r = await fetch(path, opts);
+  const ct = r.headers.get('content-type') || '';
+  const data = ct.includes('application/json') ? await r.json() : await r.text();
+  if (!r.ok) throw new Error(data?.error || data || `HTTP ${r.status}`);
+  return data;
 }
 
-function showLogin(){document.getElementById('login-screen').style.display='flex';document.getElementById('board-screen').style.display='none';currentUser=null}
-function showBoard(){document.getElementById('login-screen').style.display='none';document.getElementById('board-screen').style.display='flex';if(currentUser?.role==='admin')document.getElementById('admin-link').classList.remove('hidden')}
-
-document.getElementById('login-form').addEventListener('submit',async(e)=>{
-  e.preventDefault();
-  const errEl=document.getElementById('login-error');errEl.style.display='none';
-  try{
-    const data=await api('POST','/api/auth/login',{username:document.getElementById('login-username').value.trim(),password:document.getElementById('login-password').value});
-    if(!data)return;
-    currentUser=data;await loadEverything();showBoard();
-  }catch(err){errEl.textContent=err.message||'Login failed';errEl.style.display='block'}
-});
-document.getElementById('logout-btn').addEventListener('click',async()=>{await api('POST','/api/auth/logout');showLogin()});
-
-async function loadEverything(){
-  await Promise.all([loadColumns(),loadCards(),loadUsers(),loadLabels(),loadSavedViews(),loadNotifications()]);
-  renderBoard();renderSavedViews();populateFilterAssignees();populateLabelFilter();
+// ── Utility ────────────────────────────────────────────────────
+function fmtDate(d) {
+  if (!d) return '';
+  const dt = new Date(d);
+  return dt.toLocaleDateString(undefined, { month:'short', day:'numeric', year:'numeric' });
 }
-async function loadColumns(){const d=await api('GET','/api/columns');if(d)columns=d}
-async function loadCards(){const d=await api('GET','/api/cards');if(d)cards=d}
-async function loadUsers(){const d=await api('GET','/api/admin/users').catch(()=>null);if(d)allUsers=d}
-async function loadLabels(){const d=await api('GET','/api/cards/labels');if(d){allLabels=d;renderLabelPicker();populateLabelFilter()}}
-async function loadSavedViews(){const d=await api('GET','/api/cards/views');if(d)savedViews=d}
-async function loadNotifications(){
-  const d=await api('GET','/api/cards/notifications');if(!d)return;
-  const badge=document.getElementById('notif-badge'),list=document.getElementById('notif-list');
-  if(d.unread_count>0){badge.textContent=d.unread_count;badge.classList.remove('hidden')}else{badge.classList.add('hidden')}
-  if(!d.notifications?.length){list.innerHTML='<div class="notif-empty">No notifications</div>';return}
-  list.innerHTML=d.notifications.map(n=>`<div class="notif-item ${n.is_read?'':'unread'}" data-nid="${n.id}"><div class="notif-msg">${esc(n.message)}</div><div class="notif-time">${ago(n.created_at)}</div></div>`).join('');
-  list.querySelectorAll('.notif-item').forEach(el=>el.addEventListener('click',async()=>{await api('PATCH',`/api/cards/notifications/${el.dataset.nid}/read`);await loadNotifications()}));
+function fmtDateTime(d) {
+  if (!d) return '';
+  return new Date(d).toLocaleString(undefined, { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' });
+}
+function fmtDuration(s) {
+  if (!s) return '0m';
+  const h = Math.floor(s/3600), m = Math.floor((s%3600)/60);
+  return h ? `${h}h ${m}m` : `${m}m`;
+}
+function timeAgo(d) {
+  const diff = (Date.now() - new Date(d)) / 1000;
+  if (diff < 60)   return 'just now';
+  if (diff < 3600) return `${Math.floor(diff/60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff/3600)}h ago`;
+  return `${Math.floor(diff/86400)}d ago`;
+}
+function dueBadge(due) {
+  if (!due) return '';
+  const diff = (new Date(due) - Date.now()) / 1000 / 3600;
+  if (diff < 0)  return `<span class="due-badge due-overdue">Overdue</span>`;
+  if (diff < 24) return `<span class="due-badge due-soon">Due Soon</span>`;
+  if (diff < 72) return `<span class="due-badge due-upcoming">Due ${fmtDate(due)}</span>`;
+  return `<span class="due-badge" style="background:var(--surface-alt);color:var(--text-muted)">📅 ${fmtDate(due)}</span>`;
+}
+function priorityDot(p) {
+  return `<span class="priority-dot dot-${p}" title="${p}"></span>`;
+}
+function renderMentions(text) {
+  return (text||'').replace(/@(\w+)/g, '<span class="mention">@$1</span>');
+}
+function showError(elId, msg) {
+  const el = document.getElementById(elId);
+  if (el) { el.textContent = msg; el.style.display = 'block'; }
+}
+function hideError(elId) {
+  const el = document.getElementById(elId);
+  if (el) { el.style.display = 'none'; }
 }
 
-function filteredCards(){
-  return cards.filter(c=>{
-    if(filterSearch){const q=filterSearch.toLowerCase();if(!c.title.toLowerCase().includes(q)&&!(c.description||'').toLowerCase().includes(q))return false}
-    if(filterPriority&&c.priority!==filterPriority)return false;
-    if(filterAssignee&&c.assignee_username!==filterAssignee)return false;
-    if(filterLabel){const lbls=c.labels||[];if(!lbls.some(l=>String(l.id)===filterLabel))return false}
+// ── Login ──────────────────────────────────────────────────────
+document.getElementById('loginBtn').addEventListener('click', doLogin);
+document.getElementById('loginPass').addEventListener('keydown', e => { if (e.key==='Enter') doLogin(); });
+
+async function doLogin() {
+  hideError('loginError');
+  const username = document.getElementById('loginUser').value.trim();
+  const password = document.getElementById('loginPass').value;
+  if (!username || !password) return showError('loginError', 'Username and password are required.');
+  try {
+    const data = await api('POST', '/api/auth/login', { username, password });
+    currentUser = data;
+    if (!currentUser.id) {
+      const me = await api('GET', '/api/auth/me');
+      currentUser = me;
+    }
+    await bootApp();
+  } catch (err) {
+    showError('loginError', err.message || 'Login failed. Check your credentials.');
+  }
+}
+
+// ── Boot ───────────────────────────────────────────────────────
+async function bootApp() {
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('appShell').style.display = 'flex';
+  document.getElementById('userLabel').textContent = `👤 ${currentUser.username}`;
+  if (currentUser.role === 'admin') {
+    document.getElementById('adminLink').style.display = 'inline-flex';
+  }
+  await Promise.all([loadBoards(), loadUsers(), loadLabels(), loadSavedViews()]);
+  await loadBoard();
+  loadNotifications();
+  setInterval(loadNotifications, 60_000);
+}
+
+// ── Boards ─────────────────────────────────────────────────────
+async function loadBoards() {
+  try {
+    const boards = await api('GET', '/api/boards');
+    const sel = document.getElementById('boardSelector');
+    sel.innerHTML = boards.map(b =>
+      `<option value="${b.id}">${b.name}${b.is_default?' (default)':''}</option>`
+    ).join('');
+    if (boards.length > 0) currentBoardId = boards[0].id;
+    sel.addEventListener('change', () => { currentBoardId = sel.value; loadBoard(); });
+  } catch {}
+}
+
+// ── Users ──────────────────────────────────────────────────────
+async function loadUsers() {
+  try {
+    allUsers = await api('GET', '/api/admin/users');
+    const sel = document.getElementById('filterAssignee');
+    const cardSel = document.getElementById('cardAssignee');
+    allUsers.forEach(u => {
+      sel.innerHTML += `<option value="${u.id}">${u.username}</option>`;
+      cardSel.innerHTML += `<option value="${u.id}">${u.username}</option>`;
+    });
+  } catch {}
+}
+
+// ── Labels ─────────────────────────────────────────────────────
+async function loadLabels() {
+  try {
+    allLabels = await api('GET', '/api/cards/labels');
+    const sel = document.getElementById('filterLabel');
+    allLabels.forEach(l => {
+      sel.innerHTML += `<option value="${l.id}">${l.name}</option>`;
+    });
+  } catch {}
+}
+
+// ── Saved Views ────────────────────────────────────────────────
+async function loadSavedViews() {
+  try {
+    savedViews = await api('GET', '/api/cards/views');
+    renderSavedViews();
+  } catch {}
+}
+function renderSavedViews() {
+  const el = document.getElementById('savedViews');
+  el.innerHTML = savedViews.map(v =>
+    `<span class="view-chip" data-id="${v.id}" data-filters='${JSON.stringify(v.filters)}'>
+       ${v.name}
+       <span class="view-chip-del" data-del="${v.id}">✕</span>
+     </span>`
+  ).join('');
+  el.querySelectorAll('.view-chip').forEach(chip => {
+    chip.addEventListener('click', e => {
+      if (e.target.dataset.del) return;
+      const f = JSON.parse(chip.dataset.filters);
+      document.getElementById('searchInput').value    = f.search    || '';
+      document.getElementById('filterPriority').value = f.priority  || '';
+      document.getElementById('filterAssignee').value = f.assignee  || '';
+      document.getElementById('filterLabel').value    = f.label     || '';
+      activeFilters = { ...f };
+      renderBoard();
+    });
+  });
+  el.querySelectorAll('.view-chip-del').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      await api('DELETE', `/api/cards/views/${btn.dataset.del}`);
+      await loadSavedViews();
+    });
+  });
+}
+
+// ── Board ──────────────────────────────────────────────────────
+async function loadBoard() {
+  try {
+    const [cols, cards] = await Promise.all([
+      api('GET', '/api/columns'),
+      api('GET', '/api/cards')
+    ]);
+    columns  = cols;
+    allCards = cards;
+    renderBoard();
+  } catch (err) {
+    console.error('Board load error:', err);
+  }
+}
+
+function getFilteredCards() {
+  const showArchived = document.getElementById('showArchived').checked;
+  return allCards.filter(c => {
+    if (!showArchived && c.is_archived) return false;
+    if (activeFilters.search) {
+      const q = activeFilters.search.toLowerCase();
+      if (!c.title.toLowerCase().includes(q) && !(c.description||'').toLowerCase().includes(q)) return false;
+    }
+    if (activeFilters.priority && c.priority !== activeFilters.priority) return false;
+    if (activeFilters.assignee && String(c.assignee_id) !== String(activeFilters.assignee)) return false;
+    if (activeFilters.label && !(c.labels||[]).some(l => String(l.id) === String(activeFilters.label))) return false;
     return true;
   });
 }
 
-function renderBoard(){
-  const container=document.getElementById('board-container');
-  const visible=filteredCards();
-  container.innerHTML='';
-  for(const col of columns)container.appendChild(buildColumnEl(col,visible.filter(c=>c.column_id===col.id)));
-  const addBtn=document.createElement('button');
-  addBtn.className='add-column-btn';addBtn.innerHTML='+ Add Column';
-  addBtn.addEventListener('click',()=>document.getElementById('col-modal').showModal());
-  container.appendChild(addBtn);
-}
+function renderBoard() {
+  const wrap = document.getElementById('boardWrap');
+  const filtered = getFilteredCards();
+  wrap.innerHTML = '';
 
-function buildColumnEl(col,colCards){
-  const div=document.createElement('div');div.className='kanban-column';div.dataset.colId=col.id;
-  const wipWarn=col.wip_limit&&colCards.length>=col.wip_limit?`<span class="col-wip-warn">WIP ${colCards.length}/${col.wip_limit}</span>`:'';
-  div.innerHTML=`<div class="col-header"><span class="col-title">${esc(col.name)}</span><div style="display:flex;align-items:center;gap:.4rem;">${wipWarn}<span class="col-count">${colCards.length}</span></div></div><div class="cards-list" data-col-id="${col.id}"></div>`;
-  const list=div.querySelector('.cards-list');
-  for(const card of colCards)list.appendChild(buildCardEl(card));
-  div.addEventListener('dragover',e=>{e.preventDefault();div.classList.add('drag-over-col')});
-  div.addEventListener('dragleave',()=>div.classList.remove('drag-over-col'));
-  div.addEventListener('drop',e=>{e.preventDefault();div.classList.remove('drag-over-col');if(!dragCardId)return;moveCard(dragCardId,parseInt(div.dataset.colId,10),colCards.length)});
-  return div;
-}
+  if (columns.length === 0) {
+    wrap.innerHTML = `<div style="padding:2rem;color:var(--text-muted);font-size:.9rem">
+      No columns yet. ${currentUser.role==='admin'?'Click "+ Add Column" to get started.':'Ask an admin to create columns.'}
+    </div>`;
+    if (currentUser.role === 'admin') {
+      const addBtn = document.createElement('button');
+      addBtn.className = 'btn btn-primary';
+      addBtn.textContent = '+ Add Column';
+      addBtn.style.margin = '1rem';
+      addBtn.addEventListener('click', () => openColumnModal());
+      wrap.appendChild(addBtn);
+    }
+    return;
+  }
 
-function buildCardEl(card){
-  const el=document.createElement('div');el.className='kanban-card';el.dataset.cardId=card.id;el.dataset.priority=card.priority;el.draggable=true;
-  const dueBadge=card.due_status==='overdue'?`<span class="badge badge-overdue">⚠ Overdue</span>`:card.due_status==='due_soon'?`<span class="badge badge-due-soon">⏰ Due Soon</span>`:'';
-  const visBadge=card.visibility==='private'?`<span class="badge badge-private">🔒</span>`:'';
-  const prioBadge=`<span class="badge badge-${card.priority}">${card.priority}</span>`;
-  const labelChips=(card.labels||[]).map(l=>`<span class="label-chip" style="background:${esc(l.color)}">${esc(l.name)}</span>`).join('');
-  const subtaskProg=card.subtask_total>0?`<span style="font-size:.72rem;color:var(--text-muted)">${card.subtask_done}/${card.subtask_total}</span><div class="progress-bar-wrap"><div class="progress-bar-fill" style="width:${Math.round(card.subtask_done/card.subtask_total*100)}%"></div></div>`:'';
-  const assignee=card.assignee_username?`<span class="card-assignee">👤 ${esc(card.assignee_username)}</span>`:'';
-  const canEdit=currentUser?.role==='admin'||card.owner_id===currentUser?.id;
-  const editBtn=canEdit?`<button class="card-action-btn" data-action="edit" title="Edit">✏️</button>`:'';
-  const archBtn=canEdit?`<button class="card-action-btn" data-action="archive" title="Archive">🗄️</button>`:'';
-  const delBtn=canEdit?`<button class="card-action-btn danger" data-action="delete" title="Delete">🗑️</button>`:'';
-  el.innerHTML=`<div class="card-title">${esc(card.title)}</div>${card.description?`<div class="card-desc">${esc(card.description)}</div>`:''}<div class="card-meta">${prioBadge}${dueBadge}${visBadge}</div>${labelChips?`<div class="card-labels">${labelChips}</div>`:''}<div class="card-footer"><div style="display:flex;align-items:center;gap:.4rem;flex:1;">${assignee}${subtaskProg}</div><div class="card-actions"><button class="card-action-btn" data-action="detail" title="Details">💬</button>${editBtn}${archBtn}${delBtn}</div></div>`;
-  el.addEventListener('click',e=>{
-    const action=e.target.closest('[data-action]')?.dataset.action;
-    if(action==='detail'){openDetailPanel(card.id);return}
-    if(action==='edit'){openEditModal(card.id);return}
-    if(action==='archive'){archiveCard(card.id,card.title);return}
-    if(action==='delete'){deleteCard(card.id,card.title);return}
-    openDetailPanel(card.id);
+  columns.forEach(col => {
+    const colCards = filtered.filter(c => c.column_id === col.id)
+      .sort((a,b) => a.position_in_column - b.position_in_column);
+    const activeCount = allCards.filter(c => c.column_id === col.id && !c.is_archived).length;
+    const wipClass = col.wip_limit
+      ? (activeCount > col.wip_limit ? 'wip-over' : activeCount === col.wip_limit ? 'wip-warn' : 'wip-ok')
+      : '';
+    const wipBadge = col.wip_limit
+      ? `<span class="wip-badge ${wipClass}" title="WIP: ${activeCount}/${col.wip_limit}">${activeCount}/${col.wip_limit}</span>`
+      : '';
+
+    const colEl = document.createElement('div');
+    colEl.className = 'column';
+    colEl.dataset.colId = col.id;
+    colEl.innerHTML = `
+      <div class="column-header">
+        <span class="column-name">${col.name}</span>
+        <div class="column-meta">
+          ${wipBadge}
+          <span class="card-count">${colCards.length}</span>
+          ${currentUser.role==='admin' ? `
+            <button class="btn btn-secondary btn-sm" onclick="openColumnModal('${col.id}','${col.name}',${col.wip_limit||'null'})" title="Edit column">✏️</button>
+            <button class="btn btn-danger btn-sm" onclick="deleteColumn('${col.id}')" title="Delete column">🗑️</button>
+          ` : ''}
+        </div>
+      </div>
+      <div class="column-cards" id="col-${col.id}" data-col-id="${col.id}"></div>
+      <div class="column-footer">
+        <button class="btn btn-secondary btn-sm btn-full" onclick="openNewCard('${col.id}')">+ Add Card</button>
+      </div>`;
+    wrap.appendChild(colEl);
+
+    const cardsEl = document.getElementById(`col-${col.id}`);
+    colCards.forEach(card => cardsEl.appendChild(buildCardEl(card)));
+    setupDropZone(cardsEl);
   });
-  el.addEventListener('dragstart',e=>{dragCardId=card.id;el.classList.add('dragging');e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',card.id)});
-  el.addEventListener('dragend',()=>{el.classList.remove('dragging');dragCardId=null});
-  el.addEventListener('dragover',e=>{e.preventDefault();e.stopPropagation();if(!dragCardId||dragCardId===card.id)return;el.classList.add('drag-over')});
-  el.addEventListener('dragleave',()=>el.classList.remove('drag-over'));
-  el.addEventListener('drop',e=>{e.preventDefault();e.stopPropagation();el.classList.remove('drag-over');if(!dragCardId||dragCardId===card.id)return;moveCard(dragCardId,card.column_id,card.position_in_column)});
+
+  // Add Column button (admin)
+  if (currentUser.role === 'admin') {
+    const addColEl = document.createElement('div');
+    addColEl.style.cssText = 'display:flex;align-items:flex-start;padding-top:.5rem';
+    addColEl.innerHTML = `<button class="btn btn-secondary" onclick="openColumnModal()" style="white-space:nowrap">+ Add Column</button>`;
+    wrap.appendChild(addColEl);
+  }
+}
+
+function buildCardEl(card) {
+  const el = document.createElement('div');
+  el.className = `card p-${card.priority}${card.is_archived?' archived-card':''}`;
+  el.dataset.cardId = card.id;
+  el.draggable = true;
+
+  const labels = (card.labels||[]).map(l =>
+    `<span class="label-chip" style="background:${l.color||'#718096'}">${l.name}</span>`
+  ).join('');
+
+  const subtaskBar = (card.subtask_total > 0) ? `
+    <div class="subtask-bar">
+      <div class="subtask-progress"><div class="subtask-fill" style="width:${Math.round(card.subtask_done/card.subtask_total*100)}%"></div></div>
+      <div class="subtask-label">${card.subtask_done}/${card.subtask_total} subtasks</div>
+    </div>` : '';
+
+  const depBadge = (card.blocking_count > 0)
+    ? `<span class="dep-badge">⛔ Blocked by ${card.blocking_count}</span>` : '';
+
+  const timeStr = card.total_time_s > 0
+    ? `<span class="card-time-badge">⏱ ${fmtDuration(card.total_time_s)}</span>` : '';
+
+  el.innerHTML = `
+    ${labels ? `<div class="card-labels">${labels}</div>` : ''}
+    <div class="card-title" data-card-id="${card.id}">${card.title}</div>
+    <div class="card-meta">
+      ${priorityDot(card.priority)}
+      ${card.assignee_username ? `<span>👤 ${card.assignee_username}</span>` : ''}
+      ${dueBadge(card.due_date)}
+      <span class="visibility-badge ${card.visibility==='public'?'badge-public':'badge-private'}">${card.visibility==='public'?'🌐':'🔒'}</span>
+      ${depBadge}
+      ${timeStr}
+    </div>
+    ${subtaskBar}
+    <div class="card-actions">
+      <button class="btn btn-secondary btn-sm" onclick="openDetail('${card.id}')">Details</button>
+      ${canEditCard(card) ? `<button class="btn btn-secondary btn-sm" onclick="openEditCard('${card.id}')">Edit</button>` : ''}
+      ${canEditCard(card) ? `<button class="btn btn-${card.is_archived?'success':'warning'} btn-sm" onclick="toggleArchive('${card.id}',${card.is_archived})">${card.is_archived?'Unarchive':'Archive'}</button>` : ''}
+      ${canEditCard(card) ? `<button class="btn btn-danger btn-sm" onclick="deleteCard('${card.id}')">Delete</button>` : ''}
+    </div>`;
+
+  // Inline title edit (double-click)
+  el.querySelector('.card-title').addEventListener('dblclick', e => {
+    e.stopPropagation();
+    const titleEl = e.currentTarget;
+    if (!canEditCard(card)) return;
+    titleEl.contentEditable = 'true';
+    titleEl.classList.add('editing');
+    titleEl.focus();
+    titleEl.addEventListener('blur', async () => {
+      titleEl.contentEditable = 'false';
+      titleEl.classList.remove('editing');
+      const newTitle = titleEl.textContent.trim();
+      if (newTitle && newTitle !== card.title) {
+        try {
+          await api('PUT', `/api/cards/${card.id}`, { title: newTitle });
+          card.title = newTitle;
+        } catch { titleEl.textContent = card.title; }
+      }
+    }, { once: true });
+    titleEl.addEventListener('keydown', e => { if (e.key==='Enter') { e.preventDefault(); titleEl.blur(); } });
+  });
+
+  // Drag events
+  el.addEventListener('dragstart', e => {
+    dragCard = card;
+    el.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', card.id);
+  });
+  el.addEventListener('dragend', () => {
+    el.classList.remove('dragging');
+    if (dragPlaceholder) { dragPlaceholder.remove(); dragPlaceholder = null; }
+    dragCard = null;
+  });
+
   return el;
 }
 
-async function moveCard(cardId,colId,position){
-  try{const u=await api('PATCH',`/api/cards/${cardId}/reorder`,{column_id:colId,position});if(!u)return;await loadCards();renderBoard()}
-  catch(err){toast(`Move failed: ${err.message}`,'error')}
-}
-async function archiveCard(cardId,title){
-  if(!confirm(`Archive "${title}"?`))return;
-  try{await api('PATCH',`/api/cards/${cardId}/archive`);cards=cards.filter(c=>c.id!==cardId);renderBoard();toast('Card archived','success')}
-  catch(err){toast(err.message,'error')}
-}
-async function deleteCard(cardId,title){
-  if(!confirm(`Permanently delete "${title}"?`))return;
-  try{await api('DELETE',`/api/cards/${cardId}`);cards=cards.filter(c=>c.id!==cardId);renderBoard();toast('Card deleted','success')}
-  catch(err){toast(err.message,'error')}
+function canEditCard(card) {
+  return currentUser.role === 'admin' ||
+         card.owner_id === currentUser.id ||
+         card.assignee_id === currentUser.id;
 }
 
-function renderLabelPicker(){
-  const picker=document.getElementById('card-label-picker');
-  picker.innerHTML=allLabels.map(l=>`<span class="label-option" data-lid="${l.id}" style="background:${esc(l.color)}">${esc(l.name)}</span>`).join('');
-  picker.querySelectorAll('.label-option').forEach(el=>el.addEventListener('click',()=>{const lid=parseInt(el.dataset.lid,10);if(selectedLabelIds.has(lid)){selectedLabelIds.delete(lid);el.classList.remove('selected')}else{selectedLabelIds.add(lid);el.classList.add('selected')}}));
-}
-function populateColumnSelect(){
-  const sel=document.getElementById('card-column-select'),noCol=document.getElementById('card-modal-no-columns'),saveBtn=document.getElementById('card-modal-save');
-  sel.innerHTML='';
-  if(!columns.length){noCol.classList.remove('hidden');saveBtn.disabled=true;return}
-  noCol.classList.add('hidden');saveBtn.disabled=false;
-  for(const col of columns){const o=document.createElement('option');o.value=col.id;o.textContent=col.name;sel.appendChild(o)}
-}
-function populateAssigneeSelect(selectedId){
-  const sel=document.getElementById('card-assignee-select');sel.innerHTML='<option value="">Unassigned</option>';
-  for(const u of allUsers){const o=document.createElement('option');o.value=u.id;o.textContent=u.username;if(selectedId&&u.id===selectedId)o.selected=true;sel.appendChild(o)}
-}
-function populateFilterAssignees(){
-  const sel=document.getElementById('filter-assignee'),cur=sel.value;sel.innerHTML='<option value="">All Assignees</option>';
-  [...new Set(cards.map(c=>c.assignee_username).filter(Boolean))].forEach(n=>{const o=document.createElement('option');o.value=n;o.textContent=n;if(n===cur)o.selected=true;sel.appendChild(o)});
-}
-function populateLabelFilter(){
-  const sel=document.getElementById('filter-label'),cur=sel.value;sel.innerHTML='<option value="">All Labels</option>';
-  allLabels.forEach(l=>{const o=document.createElement('option');o.value=l.id;o.textContent=l.name;if(String(l.id)===cur)o.selected=true;sel.appendChild(o)});
-}
+// ── Drag & Drop ────────────────────────────────────────────────
+function setupDropZone(colEl) {
+  colEl.addEventListener('dragover', e => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    colEl.classList.add('drag-over');
 
-function openNewModal(){
-  editCardId=null;selectedLabelIds=new Set();
-  document.getElementById('card-modal-title').textContent='New Card';
-  document.getElementById('card-title-input').value='';document.getElementById('card-desc-input').value='';
-  document.getElementById('card-priority-select').value='medium';document.getElementById('card-visibility-select').value='public';document.getElementById('card-due-input').value='';
-  populateColumnSelect();populateAssigneeSelect(null);renderLabelPicker();
-  document.getElementById('card-modal').showModal();document.getElementById('card-title-input').focus();
-}
-function openEditModal(cardId){
-  const card=cards.find(c=>c.id===cardId);if(!card)return;
-  editCardId=cardId;selectedLabelIds=new Set((card.labels||[]).map(l=>l.id));
-  document.getElementById('card-modal-title').textContent='Edit Card';
-  document.getElementById('card-title-input').value=card.title;document.getElementById('card-desc-input').value=card.description||'';
-  document.getElementById('card-priority-select').value=card.priority;document.getElementById('card-visibility-select').value=card.visibility;
-  document.getElementById('card-due-input').value=card.due_date?new Date(card.due_date).toISOString().slice(0,16):'';
-  populateColumnSelect();document.getElementById('card-column-select').value=card.column_id;populateAssigneeSelect(card.assignee_id);renderLabelPicker();
-  document.querySelectorAll('#card-label-picker .label-option').forEach(el=>{if(selectedLabelIds.has(parseInt(el.dataset.lid,10)))el.classList.add('selected')});
-  document.getElementById('card-modal').showModal();
-}
-
-document.getElementById('card-modal-save').addEventListener('click',async()=>{
-  const title=document.getElementById('card-title-input').value.trim();
-  const desc=document.getElementById('card-desc-input').value.trim();
-  const priority=document.getElementById('card-priority-select').value;
-  const column_id=parseInt(document.getElementById('card-column-select').value,10);
-  const assignee=document.getElementById('card-assignee-select').value;
-  const visibility=document.getElementById('card-visibility-select').value;
-  const due_raw=document.getElementById('card-due-input').value;
-  const due_date=due_raw?new Date(due_raw).toISOString():null;
-  const label_ids=[...selectedLabelIds];
-  if(!title){toast('Title is required','error');return}
-  if(!column_id){toast('Please select a column','error');return}
-  const payload={title,description:desc,priority,column_id,visibility,due_date,label_ids,assignee_id:assignee?parseInt(assignee,10):null};
-  try{
-    if(editCardId){
-      const u=await api('PUT',`/api/cards/${editCardId}`,payload);if(!u)return;
-      await api('PATCH',`/api/cards/${editCardId}/labels`,{label_ids});
-      const idx=cards.findIndex(c=>c.id===editCardId);
-      if(idx!==-1)cards[idx]={...cards[idx],...u,labels:allLabels.filter(l=>label_ids.includes(l.id))};
-      toast('Card updated','success');
-    }else{
-      const nc=await api('POST','/api/cards',payload);if(!nc)return;
-      nc.labels=allLabels.filter(l=>label_ids.includes(l.id));cards.push(nc);toast('Card created','success');
+    if (!dragPlaceholder) {
+      dragPlaceholder = document.createElement('div');
+      dragPlaceholder.className = 'card drag-placeholder';
     }
-    document.getElementById('card-modal').close();renderBoard();populateFilterAssignees();
-  }catch(err){toast(err.message,'error')}
-});
-document.getElementById('card-modal-close').addEventListener('click',()=>document.getElementById('card-modal').close());
-document.getElementById('card-modal-cancel').addEventListener('click',()=>document.getElementById('card-modal').close());
 
-document.getElementById('col-modal-save').addEventListener('click',async()=>{
-  const name=document.getElementById('col-name-input').value.trim();const wip=document.getElementById('col-wip-input').value;
-  if(!name){toast('Column name is required','error');return}
-  try{const nc=await api('POST','/api/columns',{name,wip_limit:wip?parseInt(wip,10):null});if(!nc)return;columns.push(nc);document.getElementById('col-modal').close();renderBoard();populateColumnSelect();toast('Column added','success')}
-  catch(err){toast(err.message,'error')}
-});
-document.getElementById('col-modal-close').addEventListener('click',()=>document.getElementById('col-modal').close());
-document.getElementById('col-modal-cancel').addEventListener('click',()=>document.getElementById('col-modal').close());
+    const afterEl = getDragAfterElement(colEl, e.clientY);
+    if (afterEl) {
+      colEl.insertBefore(dragPlaceholder, afterEl);
+    } else {
+      colEl.appendChild(dragPlaceholder);
+    }
+  });
 
-async function openDetailPanel(cardId){
-  detailCardId=cardId;const card=cards.find(c=>c.id===cardId);
-  document.getElementById('detail-title').textContent=card?.title||'Card Details';
-  document.getElementById('detail-panel').classList.add('open');
-  activateTab('comments');
-}
-function activateTab(name){
-  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active',b.dataset.tab===name));
-  document.querySelectorAll('.tab-pane').forEach(p=>p.classList.toggle('active',p.id===`tab-${name}`));
-  if(name==='comments')loadComments();
-  if(name==='subtasks')loadSubtasks();
-  if(name==='attachments')loadAttachments();
-  if(name==='activity')loadActivity();
-}
-document.querySelectorAll('.tab-btn').forEach(btn=>btn.addEventListener('click',()=>activateTab(btn.dataset.tab)));
-document.getElementById('detail-close-btn').addEventListener('click',()=>{document.getElementById('detail-panel').classList.remove('open');detailCardId=null});
+  colEl.addEventListener('dragleave', e => {
+    if (!colEl.contains(e.relatedTarget)) {
+      colEl.classList.remove('drag-over');
+    }
+  });
 
-async function loadComments(){
-  if(!detailCardId)return;const data=await api('GET',`/api/cards/${detailCardId}/comments`);const list=document.getElementById('comments-list');
-  if(!data?.length){list.innerHTML='<div class="text-muted" style="font-size:.82rem;padding:.5rem 0;">No comments yet.</div>';return}
-  list.innerHTML=data.map(c=>`<div class="comment-item"><div class="comment-header"><span class="comment-author">${esc(c.username)}</span><div style="display:flex;align-items:center;gap:.5rem;"><span class="comment-time">${ago(c.created_at)}</span>${(currentUser?.role==='admin'||c.user_id===currentUser?.id)?`<button class="card-action-btn danger" data-cid="${c.id}" title="Delete">🗑️</button>`:''}</div></div><div class="comment-body">${mentions(esc(c.body))}</div></div>`).join('');
-  list.querySelectorAll('[data-cid]').forEach(btn=>btn.addEventListener('click',async()=>{if(!confirm('Delete this comment?'))return;await api('DELETE',`/api/cards/${detailCardId}/comments/${btn.dataset.cid}`);await loadComments()}));
-}
-document.getElementById('post-comment-btn').addEventListener('click',async()=>{
-  const body=document.getElementById('comment-input').value.trim();if(!body){toast('Comment cannot be empty','error');return}
-  try{await api('POST',`/api/cards/${detailCardId}/comments`,{body});document.getElementById('comment-input').value='';await loadComments();toast('Comment posted','success')}
-  catch(err){toast(err.message,'error')}
-});
+  colEl.addEventListener('drop', async e => {
+    e.preventDefault();
+    colEl.classList.remove('drag-over');
+    if (!dragCard) return;
 
-async function loadSubtasks(){
-  if(!detailCardId)return;const data=await api('GET',`/api/cards/${detailCardId}/subtasks`);const list=document.getElementById('subtasks-list');
-  if(!data?.length){list.innerHTML='<div class="text-muted" style="font-size:.82rem;padding:.5rem 0;">No subtasks yet.</div>';return}
-  list.innerHTML=data.map(s=>`<div class="subtask-item ${s.is_done?'done':''}" data-sid="${s.id}"><input type="checkbox" ${s.is_done?'checked':''} data-sid="${s.id}"/><span>${esc(s.title)}</span><button class="subtask-del" data-sid="${s.id}" title="Delete">×</button></div>`).join('');
-  list.querySelectorAll('input[type="checkbox"]').forEach(cb=>cb.addEventListener('change',async()=>{await api('PATCH',`/api/cards/${detailCardId}/subtasks/${cb.dataset.sid}`,{is_done:cb.checked});await loadSubtasks();await loadCards();renderBoard()}));
-  list.querySelectorAll('.subtask-del').forEach(btn=>btn.addEventListener('click',async()=>{await api('DELETE',`/api/cards/${detailCardId}/subtasks/${btn.dataset.sid}`);await loadSubtasks();await loadCards();renderBoard()}));
-}
-document.getElementById('add-subtask-btn').addEventListener('click',async()=>{
-  const title=document.getElementById('subtask-input').value.trim();if(!title)return;
-  await api('POST',`/api/cards/${detailCardId}/subtasks`,{title});document.getElementById('subtask-input').value='';await loadSubtasks();await loadCards();renderBoard();
-});
+    const targetColId = colEl.dataset.colId;
+    const afterEl = getDragAfterElement(colEl, e.clientY);
+    const afterCardId = afterEl ? afterEl.dataset.cardId : null;
 
-async function loadAttachments(){
-  if(!detailCardId)return;const data=await api('GET',`/api/cards/${detailCardId}/attachments`);const list=document.getElementById('attachments-list');
-  if(!data?.length){list.innerHTML='<div class="text-muted" style="font-size:.82rem;padding:.5rem 0;">No attachments yet.</div>';return}
-  list.innerHTML=data.map(a=>`<div class="attachment-item"><span class="attachment-name" data-aid="${a.id}">${esc(a.filename)}</span><span class="attachment-size">${fmtBytes(a.size_bytes)}</span><button class="card-action-btn danger" data-aid="${a.id}" title="Delete">🗑️</button></div>`).join('');
-  list.querySelectorAll('.attachment-name').forEach(el=>el.addEventListener('click',()=>window.open(`/api/cards/${detailCardId}/attachments/${el.dataset.aid}`,'_blank')));
-  list.querySelectorAll('.card-action-btn.danger[data-aid]').forEach(btn=>btn.addEventListener('click',async()=>{if(!confirm('Delete this attachment?'))return;await api('DELETE',`/api/cards/${detailCardId}/attachments/${btn.dataset.aid}`);await loadAttachments()}));
-}
-document.getElementById('upload-attachment-btn').addEventListener('click',async()=>{
-  const file=document.getElementById('attachment-input').files[0];if(!file){toast('Please select a file','error');return}
-  const form=new FormData();form.append('file',file);
-  try{const res=await fetch(`/api/cards/${detailCardId}/attachments`,{method:'POST',credentials:'include',body:form});if(!res.ok){const e=await res.json();throw new Error(e.error)}document.getElementById('attachment-input').value='';await loadAttachments();toast('File uploaded','success')}
-  catch(err){toast(err.message,'error')}
-});
+    if (dragPlaceholder) { dragPlaceholder.remove(); dragPlaceholder = null; }
 
-async function loadActivity(){
-  if(!detailCardId)return;const data=await api('GET',`/api/cards/${detailCardId}/activity`);const list=document.getElementById('activity-list');
-  if(!data?.length){list.innerHTML='<div class="text-muted" style="font-size:.82rem;padding:.5rem 0;">No activity yet.</div>';return}
-  list.innerHTML=data.map(a=>`<div class="activity-item"><div class="activity-dot"></div><div><div class="activity-text">${fmtActivity(a)}</div><div class="activity-time">${ago(a.created_at)}</div></div></div>`).join('');
+    try {
+      await api('PUT', `/api/cards/${dragCard.id}`, {
+        column_id: targetColId,
+        after_card_id: afterCardId || null
+      });
+      await loadBoard();
+    } catch (err) {
+      console.error('Drop error:', err);
+    }
+  });
 }
 
-// Feed
-async function loadFeed(){
-  const data=await api('GET','/api/cards/feed?limit=50');const list=document.getElementById('feed-list');
-  if(!data?.length){list.innerHTML='<div class="feed-empty">No activity yet.</div>';return}
-  const icons={card_created:'✨',card_moved:'↔️',card_archived:'🗄️',card_unarchived:'♻️',comment_added:'💬',file_attached:'📎'};
-  list.innerHTML=data.map(item=>{
-    const icon=icons[item.action]||'📋';
-    const actor=item.actor_username?`<strong>${esc(item.actor_username)}</strong>`:'Someone';
-    const card=item.card_title?` on <em>${esc(item.card_title)}</em>`:'';
-    const map={card_created:`${actor} created a card${card}`,card_moved:`${actor} moved${card}`,card_archived:`${actor} archived${card}`,card_unarchived:`${actor} restored${card}`,comment_added:`${actor} commented${card}`,file_attached:`${actor} attached a file${card}`};
-    const text=map[item.action]||`${actor} performed ${esc(item.action)}${card}`;
-    return `<div class="feed-item"><div class="feed-icon">${icon}</div><div class="feed-content"><div class="feed-text">${text}</div><div class="feed-time">${ago(item.created_at)}</div></div></div>`;
-  }).join('');
+function getDragAfterElement(container, y) {
+  const cards = [...container.querySelectorAll('.card:not(.dragging):not(.drag-placeholder)')];
+  return cards.reduce((closest, child) => {
+    const box = child.getBoundingClientRect();
+    const offset = y - box.top - box.height / 2;
+    if (offset < 0 && offset > closest.offset) return { offset, element: child };
+    return closest;
+  }, { offset: Number.NEGATIVE_INFINITY }).element;
 }
-document.getElementById('feed-toggle-btn').addEventListener('click',async()=>{const p=document.getElementById('feed-panel');const o=p.classList.toggle('open');if(o)await loadFeed()});
-document.getElementById('feed-close-btn').addEventListener('click',()=>document.getElementById('feed-panel').classList.remove('open'));
 
-// Archive
-document.getElementById('archive-btn').addEventListener('click',async()=>{
-  const data=await api('GET','/api/cards/archive');const list=document.getElementById('archive-list');
-  if(!data?.length){list.innerHTML='<div style="padding:1.5rem;text-align:center;color:var(--text-muted);">No archived cards.</div>'}
-  else{
-    list.innerHTML=data.map(c=>`<div class="archive-item"><div><div class="archive-item-title">${esc(c.title)}</div><div class="archive-item-meta">Archived ${ago(c.archived_at)}</div></div><button class="btn btn-success" style="font-size:.78rem;padding:.3rem .65rem;" data-cid="${c.id}" data-action="unarchive">Restore</button></div>`).join('');
-    list.querySelectorAll('[data-action="unarchive"]').forEach(btn=>btn.addEventListener('click',async()=>{await api('PATCH',`/api/cards/${btn.dataset.cid}/unarchive`);await loadCards();renderBoard();document.getElementById('archive-overlay').classList.remove('open');toast('Card restored','success')}));
+// ── Card CRUD ──────────────────────────────────────────────────
+let editingCardId = null;
+
+function openNewCard(colId) {
+  editingCardId = null;
+  document.getElementById('cardModalTitle').textContent = 'New Card';
+  document.getElementById('cardTitle').value = '';
+  document.getElementById('cardDesc').value = '';
+  document.getElementById('cardDueDate').value = '';
+  document.getElementById('cardVisibility').value = 'public';
+  document.getElementById('cardPriority').value = 'medium';
+  document.getElementById('cardRecurrence').value = '';
+  document.getElementById('cardAssignee').value = '';
+  hideError('cardError');
+  populateColumnSelect(colId);
+  renderLabelPicker([]);
+  document.getElementById('cardModal').showModal();
+}
+
+function openEditCard(cardId) {
+  const card = allCards.find(c => c.id === cardId);
+  if (!card) return;
+  editingCardId = cardId;
+  document.getElementById('cardModalTitle').textContent = 'Edit Card';
+  document.getElementById('cardTitle').value = card.title;
+  document.getElementById('cardDesc').value = card.description || '';
+  document.getElementById('cardPriority').value = card.priority;
+  document.getElementById('cardVisibility').value = card.visibility;
+  document.getElementById('cardAssignee').value = card.assignee_id || '';
+  document.getElementById('cardRecurrence').value = card.recurrence_freq || '';
+  if (card.due_date) {
+    const d = new Date(card.due_date);
+    document.getElementById('cardDueDate').value = d.toISOString().slice(0,16);
+  } else {
+    document.getElementById('cardDueDate').value = '';
   }
-  document.getElementById('archive-overlay').classList.add('open');
-});
-document.getElementById('archive-close-btn').addEventListener('click',()=>document.getElementById('archive-overlay').classList.remove('open'));
-
-// CSV Export
-document.getElementById('export-csv-btn').addEventListener('click',async()=>{
-  try{const res=await fetch('/api/cards/export/csv',{credentials:'include'});if(!res.ok)throw new Error('Export failed');const blob=await res.blob();const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`kanban-export-${new Date().toISOString().slice(0,10)}.csv`;a.click();URL.revokeObjectURL(url);toast('CSV exported','success')}
-  catch(err){toast(err.message,'error')}
-});
-
-// Saved Views
-function renderSavedViews(){
-  const container=document.getElementById('saved-views-list');
-  if(!savedViews.length){container.innerHTML='<span style="font-size:.78rem;color:var(--text-muted);">No saved views</span>';return}
-  container.innerHTML=savedViews.map(v=>`<span class="view-chip" data-vid="${v.id}">${esc(v.name)}<span class="del" data-vid="${v.id}" title="Delete">×</span></span>`).join('');
-  container.querySelectorAll('.view-chip').forEach(chip=>chip.addEventListener('click',e=>{if(e.target.classList.contains('del'))return;const view=savedViews.find(v=>v.id===parseInt(chip.dataset.vid,10));if(!view)return;const f=view.filters||{};filterSearch=f.search||'';filterPriority=f.priority||'';filterAssignee=f.assignee||'';filterLabel=f.label||'';document.getElementById('search-input').value=filterSearch;document.getElementById('filter-priority').value=filterPriority;document.getElementById('filter-assignee').value=filterAssignee;document.getElementById('filter-label').value=filterLabel;renderBoard()}));
-  container.querySelectorAll('.del').forEach(btn=>btn.addEventListener('click',async e=>{e.stopPropagation();await api('DELETE',`/api/cards/views/${btn.dataset.vid}`);savedViews=savedViews.filter(v=>v.id!==parseInt(btn.dataset.vid,10));renderSavedViews()}));
+  hideError('cardError');
+  populateColumnSelect(card.column_id);
+  renderLabelPicker((card.labels||[]).map(l=>l.id));
+  document.getElementById('cardModal').showModal();
 }
-document.getElementById('save-view-btn').addEventListener('click',async()=>{
-  const name=prompt('Name this view:');if(!name?.trim())return;
-  const saved=await api('POST','/api/cards/views',{name:name.trim(),filters:{search:filterSearch,priority:filterPriority,assignee:filterAssignee,label:filterLabel}});
-  if(!saved)return;const idx=savedViews.findIndex(v=>v.id===saved.id);if(idx!==-1)savedViews[idx]=saved;else savedViews.push(saved);renderSavedViews();toast(`View "${name}" saved`,'success');
-});
 
-// Filters
-document.getElementById('search-input').addEventListener('input',e=>{filterSearch=e.target.value.trim();renderBoard()});
-document.getElementById('filter-priority').addEventListener('change',e=>{filterPriority=e.target.value;renderBoard()});
-document.getElementById('filter-assignee').addEventListener('change',e=>{filterAssignee=e.target.value;renderBoard()});
-document.getElementById('filter-label').addEventListener('change',e=>{filterLabel=e.target.value;renderBoard()});
-document.getElementById('clear-filters-btn').addEventListener('click',()=>{filterSearch=filterPriority=filterAssignee=filterLabel='';document.getElementById('search-input').value='';document.getElementById('filter-priority').value='';document.getElementById('filter-assignee').value='';document.getElementById('filter-label').value='';renderBoard()});
+function populateColumnSelect(selectedColId) {
+  const sel = document.getElementById('cardColumn');
+  if (columns.length === 0) {
+    sel.innerHTML = '<option value="">No columns — admin must create columns first</option>';
+    document.getElementById('saveCardBtn').disabled = true;
+    return;
+  }
+  document.getElementById('saveCardBtn').disabled = false;
+  sel.innerHTML = columns.map(c =>
+    `<option value="${c.id}" ${c.id==selectedColId?'selected':''}>${c.name}</option>`
+  ).join('');
+}
 
-// Notifications
-document.getElementById('notif-btn').addEventListener('click',e=>{e.stopPropagation();document.getElementById('notif-dropdown').classList.toggle('open')});
-document.addEventListener('click',e=>{if(!document.getElementById('notif-wrapper').contains(e.target))document.getElementById('notif-dropdown').classList.remove('open')});
-document.getElementById('mark-all-read-btn').addEventListener('click',async()=>{await api('PATCH','/api/cards/notifications/read-all');await loadNotifications()});
+function renderLabelPicker(selectedIds) {
+  const el = document.getElementById('labelPicker');
+  el.innerHTML = allLabels.map(l => `
+    <label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;font-size:.78rem">
+      <input type="checkbox" value="${l.id}" ${selectedIds.includes(l.id)||selectedIds.map(String).includes(String(l.id))?'checked':''}/>
+      <span class="label-chip" style="background:${l.color||'#718096'}">${l.name}</span>
+    </label>`
+  ).join('');
+}
 
-// Change Password
-document.getElementById('change-pw-btn').addEventListener('click',()=>{document.getElementById('pw-current').value='';document.getElementById('pw-new').value='';document.getElementById('pw-confirm').value='';document.getElementById('pw-error').style.display='none';document.getElementById('pw-modal').showModal()});
-document.getElementById('pw-modal-close').addEventListener('click',()=>document.getElementById('pw-modal').close());
-document.getElementById('pw-modal-cancel').addEventListener('click',()=>document.getElementById('pw-modal').close());
-document.getElementById('pw-modal-save').addEventListener('click',async()=>{
-  const cur=document.getElementById('pw-current').value,np=document.getElementById('pw-new').value,conf=document.getElementById('pw-confirm').value,errEl=document.getElementById('pw-error');
-  errEl.style.display='none';
-  if(np.length<8){errEl.textContent='New password must be at least 8 characters.';errEl.style.display='block';return}
-  if(np!==conf){errEl.textContent='Passwords do not match.';errEl.style.display='block';return}
-  try{await api('POST','/api/auth/change-password',{currentPassword:cur,newPassword:np});document.getElementById('pw-modal').close();toast('Password updated','success')}
-  catch(err){errEl.textContent=err.message;errEl.style.display='block'}
-});
+document.getElementById('saveCardBtn').addEventListener('click', async () => {
+  hideError('cardError');
+  const title = document.getElementById('cardTitle').value.trim();
+  const colId = document.getElementById('cardColumn').value;
+  if (!title) return showError('cardError', 'Title is required.');
+  if (!colId)  return showError('cardError', 'Please select a column.');
 
-// New Card button
-document.getElementById('new-card-btn').addEventListener('click',openNewModal);
-
-// Keyboard shortcuts
-document.addEventListener('keydown',e=>{
-  const inInput=['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName);
-  if(e.key==='Escape'){document.getElementById('shortcuts-overlay').classList.remove('open');document.getElementById('detail-panel').classList.remove('open');document.getElementById('feed-panel').classList.remove('open');document.getElementById('archive-overlay').classList.remove('open');document.querySelectorAll('dialog[open]').forEach(d=>d.close());return}
-  if(inInput)return;
-  switch(e.key){
-    case 'c':case 'C':openNewModal();break;
-    case 'f':case 'F':e.preventDefault();document.getElementById('search-input').focus();break;
-    case 'n':case 'N':document.getElementById('notif-btn').click();break;
-    case 'a':case 'A':document.getElementById('feed-toggle-btn').click();break;
-    case 'd':case 'D':applyTheme(!document.documentElement.classList.contains('dark'));break;
-    case '?':document.getElementById('shortcuts-overlay').classList.add('open');break;
+  const labelIds = [...document.querySelectorAll('#labelPicker input:checked')].map(i=>i.value);
+  const dueVal   = document.getElementById('cardDueDate').value;
+  const body = {
+    title,
+    description:   document.getElementById('cardDesc').value.trim(),
+    priority:      document.getElementById('cardPriority').value,
+    column_id:     colId,
+    visibility:    document.getElementById('cardVisibility').value,
+    assignee_id:   document.getElementById('cardAssignee').value || null,
+    due_date:      dueVal || null,
+    recurrence_freq: document.getElementById('cardRecurrence').value || null,
+    label_ids:     labelIds,
+  };
+  try {
+    if (editingCardId) {
+      await api('PUT', `/api/cards/${editingCardId}`, body);
+    } else {
+      await api('POST', '/api/cards', body);
+    }
+    document.getElementById('cardModal').close();
+    await loadBoard();
+  } catch (err) {
+    showError('cardError', err.message);
   }
 });
-document.getElementById('close-shortcuts-btn').addEventListener('click',()=>document.getElementById('shortcuts-overlay').classList.remove('open'));
-document.getElementById('shortcuts-overlay').addEventListener('click',e=>{if(e.target===document.getElementById('shortcuts-overlay'))document.getElementById('shortcuts-overlay').classList.remove('open')});
 
-// Helpers
-function esc(s){if(s==null)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
-function mentions(h){return h.replace(/@([a-zA-Z0-9_]+)/g,'<span class="mention">@$1</span>')}
-function ago(ts){if(!ts)return'';const d=Date.now()-new Date(ts).getTime(),s=Math.floor(d/1000);if(s<60)return'just now';if(s<3600)return`${Math.floor(s/60)}m ago`;if(s<86400)return`${Math.floor(s/3600)}h ago`;return`${Math.floor(s/86400)}d ago`}
-function fmtBytes(b){if(b<1024)return`${b} B`;if(b<1048576)return`${(b/1024).toFixed(1)} KB`;return`${(b/1048576).toFixed(1)} MB`}
-function fmtActivity(a){const d=a.details||{};const m={created:`Card created in <strong>${esc(d.column)}</strong>`,moved:`Moved <strong>${esc(d.from_column)}</strong> → <strong>${esc(d.to_column)}</strong>`,priority_changed:`Priority: <strong>${d.from}</strong> → <strong>${d.to}</strong>`,visibility_changed:`Visibility set to <strong>${d.to}</strong>`,edited:`${esc(d.field)} updated`,assigned:'Card assigned',comment_added:'Comment added',due_date_set:'Due date set',subtask_added:'Subtask added',file_attached:'File attached',archived:'Card archived',unarchived:'Card restored',labels_updated:'Labels updated'};return m[a.action]||esc(a.action)}
+async function deleteCard(cardId) {
+  if (!confirm('Delete this card permanently?')) return;
+  try {
+    await api('DELETE', `/api/cards/${cardId}`);
+    await loadBoard();
+  } catch (err) { alert(err.message); }
+}
 
-// Bootstrap
-(async()=>{
-  try{const me=await fetch('/api/auth/me',{credentials:'include'});if(me.ok){currentUser=await me.json();await loadEverything();showBoard()}else{showLogin()}}
-  catch{showLogin()}
+async function toggleArchive(cardId, isArchived) {
+  try {
+    if (isArchived) {
+      await api('POST', `/api/cards/${cardId}/unarchive`);
+    } else {
+      await api('POST', `/api/cards/${cardId}/archive`);
+    }
+    await loadBoard();
+  } catch (err) { alert(err.message); }
+}
+
+// ── Column CRUD ────────────────────────────────────────────────
+let editingColId = null;
+
+function openColumnModal(colId, colName, wipLimit) {
+  editingColId = colId || null;
+  document.getElementById('columnModalTitle').textContent = colId ? 'Edit Column' : 'Add Column';
+  document.getElementById('columnName').value = colName || '';
+  document.getElementById('columnWip').value  = wipLimit || '';
+  document.getElementById('columnModal').showModal();
+}
+
+document.getElementById('saveColumnBtn').addEventListener('click', async () => {
+  const name = document.getElementById('columnName').value.trim();
+  const wip  = document.getElementById('columnWip').value;
+  if (!name) return alert('Column name is required.');
+  try {
+    if (editingColId) {
+      await api('PUT', `/api/columns/${editingColId}`, { name, wip_limit: wip ? parseInt(wip) : null });
+    } else {
+      await api('POST', '/api/columns', { name, wip_limit: wip ? parseInt(wip) : null });
+    }
+    document.getElementById('columnModal').close();
+    await loadBoard();
+  } catch (err) { alert(err.message); }
+});
+
+async function deleteColumn(colId) {
+  if (!confirm('Delete this column and all its cards?')) return;
+  try {
+    await api('DELETE', `/api/columns/${colId}`);
+    await loadBoard();
+  } catch (err) { alert(err.message); }
+}
+
+// ── Detail Panel ───────────────────────────────────────────────
+async function openDetail(cardId) {
+  detailCardId = cardId;
+  activeDetailTab = 'info';
+  document.getElementById('detailPanel').classList.add('open');
+  await renderDetailPanel();
+}
+
+document.querySelectorAll('.panel-tab').forEach(tab => {
+  tab.addEventListener('click', async () => {
+    document.querySelectorAll('.panel-tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    activeDetailTab = tab.dataset.tab;
+    await renderDetailPanel();
+  });
+});
+
+async function renderDetailPanel() {
+  if (!detailCardId) return;
+  const card = allCards.find(c => c.id === detailCardId);
+  if (!card) return;
+  document.getElementById('detailTitle').textContent = card.title;
+  const content = document.getElementById('detailContent');
+  content.innerHTML = '<p style="color:var(--text-muted);font-size:.82rem">Loading…</p>';
+
+  switch (activeDetailTab) {
+    case 'info':       renderDetailInfo(card, content); break;
+    case 'subtasks':   await renderDetailSubtasks(card, content); break;
+    case 'comments':   await renderDetailComments(card, content); break;
+    case 'time':       await renderDetailTime(card, content); break;
+    case 'deps':       await renderDetailDeps(card, content); break;
+    case 'attachments': await renderDetailAttachments(card, content); break;
+    case 'activity':   await renderDetailActivity(card, content); break;
+  }
+}
+
+function renderDetailInfo(card, el) {
+  const labels = (card.labels||[]).map(l =>
+    `<span class="label-chip" style="background:${l.color||'#718096'}">${l.name}</span>`
+  ).join(' ');
+  el.innerHTML = `
+    <div class="panel-section">
+      <h4>Details</h4>
+      <table style="width:100%;font-size:.82rem;border-collapse:collapse">
+        <tr><td style="padding:.3rem 0;color:var(--text-muted);width:100px">Priority</td><td>${card.priority}</td></tr>
+        <tr><td style="padding:.3rem 0;color:var(--text-muted)">Status</td><td>${columns.find(c=>c.id===card.column_id)?.name||'—'}</td></tr>
+        <tr><td style="padding:.3rem 0;color:var(--text-muted)">Owner</td><td>${card.owner_username||'—'}</td></tr>
+        <tr><td style="padding:.3rem 0;color:var(--text-muted)">Assignee</td><td>${card.assignee_username||'Unassigned'}</td></tr>
+        <tr><td style="padding:.3rem 0;color:var(--text-muted)">Due Date</td><td>${card.due_date?fmtDateTime(card.due_date):'None'}</td></tr>
+        <tr><td style="padding:.3rem 0;color:var(--text-muted)">Visibility</td><td>${card.visibility}</td></tr>
+        <tr><td style="padding:.3rem 0;color:var(--text-muted)">Recurrence</td><td>${card.recurrence_freq||'None'}</td></tr>
+        <tr><td style="padding:.3rem 0;color:var(--text-muted)">Created</td><td>${fmtDateTime(card.created_at)}</td></tr>
+        <tr><td style="padding:.3rem 0;color:var(--text-muted)">Labels</td><td>${labels||'None'}</td></tr>
+      </table>
+    </div>
+    ${card.description ? `<div class="panel-section"><h4>Description</h4><p style="font-size:.82rem;line-height:1.6;white-space:pre-wrap">${card.description}</p></div>` : ''}
+    ${canEditCard(card) ? `<div class="panel-section"><button class="btn btn-secondary btn-sm" onclick="openEditCard('${card.id}')">✏️ Edit Card</button></div>` : ''}`;
+}
+
+async function renderDetailSubtasks(card, el) {
+  try {
+    const subtasks = await api('GET', `/api/cards/${card.id}/subtasks`);
+    const done = subtasks.filter(s=>s.is_done).length;
+    el.innerHTML = `
+      <div class="panel-section">
+        <h4>Subtasks (${done}/${subtasks.length})</h4>
+        <div id="subtaskList">
+          ${subtasks.map(s => `
+            <div class="subtask-item" data-id="${s.id}">
+              <input type="checkbox" id="st-${s.id}" ${s.is_done?'checked':''} onchange="toggleSubtask('${card.id}','${s.id}',this.checked)"/>
+              <label for="st-${s.id}" class="${s.is_done?'done':''}">${s.title}</label>
+              ${canEditCard(card)?`<button class="del-subtask" onclick="deleteSubtask('${card.id}','${s.id}')">✕</button>`:''}
+            </div>`).join('')}
+        </div>
+        ${canEditCard(card) ? `
+          <div style="display:flex;gap:.5rem;margin-top:.75rem">
+            <input type="text" id="newSubtask" placeholder="Add subtask…" style="flex:1;padding:.4rem .6rem;border:1px solid var(--border);border-radius:6px;background:var(--input-bg);color:var(--text);font-size:.82rem"/>
+            <button class="btn btn-primary btn-sm" onclick="addSubtask('${card.id}')">Add</button>
+          </div>` : ''}
+      </div>`;
+  } catch { el.innerHTML = '<p style="color:var(--text-muted)">Could not load subtasks.</p>'; }
+}
+
+async function toggleSubtask(cardId, subtaskId, done) {
+  await api('PATCH', `/api/cards/${cardId}/subtasks/${subtaskId}`, { is_done: done });
+  const card = allCards.find(c=>c.id===cardId);
+  if (card) { if (done) card.subtask_done++; else card.subtask_done--; renderBoard(); }
+}
+
+async function deleteSubtask(cardId, subtaskId) {
+  await api('DELETE', `/api/cards/${cardId}/subtasks/${subtaskId}`);
+  await renderDetailPanel();
+  await loadBoard();
+}
+
+async function addSubtask(cardId) {
+  const inp = document.getElementById('newSubtask');
+  const title = inp.value.trim();
+  if (!title) return;
+  await api('POST', `/api/cards/${cardId}/subtasks`, { title });
+  inp.value = '';
+  await renderDetailPanel();
+  await loadBoard();
+}
+
+async function renderDetailComments(card, el) {
+  try {
+    const comments = await api('GET', `/api/cards/${card.id}/comments`);
+    el.innerHTML = `
+      <div class="panel-section">
+        <h4>Comments (${comments.length})</h4>
+        <div id="commentList">
+          ${comments.map(c => `
+            <div class="comment-item">
+              <div class="comment-header">
+                <span class="comment-author">💬 ${c.username}</span>
+                <span class="comment-time">${timeAgo(c.created_at)}</span>
+              </div>
+              <div class="comment-body">${renderMentions(c.body)}</div>
+              ${(currentUser.role==='admin'||c.user_id===currentUser.id)?`<button class="btn btn-danger btn-sm" style="margin-top:.3rem" onclick="deleteComment('${card.id}','${c.id}')">Delete</button>`:''}
+            </div>`).join('') || '<p style="color:var(--text-muted);font-size:.82rem">No comments yet.</p>'}
+        </div>
+        <div style="margin-top:.75rem">
+          <textarea id="commentBody" rows="3" placeholder="Write a comment… use @username to mention someone" style="width:100%;padding:.5rem;border:1px solid var(--border);border-radius:6px;background:var(--input-bg);color:var(--text);font-size:.82rem;resize:vertical"></textarea>
+          <button class="btn btn-primary btn-sm" style="margin-top:.4rem" onclick="postComment('${card.id}')">Post Comment</button>
+        </div>
+      </div>`;
+  } catch { el.innerHTML = '<p style="color:var(--text-muted)">Could not load comments.</p>'; }
+}
+
+async function postComment(cardId) {
+  const body = document.getElementById('commentBody').value.trim();
+  if (!body) return;
+  try {
+    await api('POST', `/api/cards/${cardId}/comments`, { body });
+    document.getElementById('commentBody').value = '';
+    await renderDetailPanel();
+  } catch (err) { alert(err.message); }
+}
+
+async function deleteComment(cardId, commentId) {
+  if (!confirm('Delete this comment?')) return;
+  await api('DELETE', `/api/cards/${cardId}/comments/${commentId}`);
+  await renderDetailPanel();
+}
+
+async function renderDetailTime(card, el) {
+  try {
+    const { entries, total_seconds } = await api('GET', `/api/time/${card.id}`);
+    const running = entries.find(e => !e.stopped_at && e.user_id === currentUser.id);
+    el.innerHTML = `
+      <div class="panel-section">
+        <h4>Time Tracking — Total: ${fmtDuration(total_seconds)}</h4>
+        <div class="timer-controls">
+          ${running
+            ? `<button class="btn btn-danger btn-sm" onclick="stopTimer('${card.id}')">⏹ Stop Timer</button>
+               <span class="timer-display" id="timerDisplay">Running…</span>`
+            : `<button class="btn btn-success btn-sm" onclick="startTimer('${card.id}')">▶ Start Timer</button>`}
+        </div>
+        <div>
+          ${entries.map(e => `
+            <div class="time-entry">
+              <span>${e.username} — ${fmtDateTime(e.started_at)}</span>
+              <span class="duration">${e.stopped_at ? fmtDuration(e.duration_s) : '⏱ Running'}</span>
+            </div>`).join('') || '<p style="color:var(--text-muted);font-size:.82rem">No time logged yet.</p>'}
+        </div>
+      </div>`;
+    if (running) startTimerDisplay(new Date(running.started_at));
+  } catch { el.innerHTML = '<p style="color:var(--text-muted)">Could not load time entries.</p>'; }
+}
+
+function startTimerDisplay(startedAt) {
+  if (timerInterval) clearInterval(timerInterval);
+  timerStarted = startedAt;
+  timerInterval = setInterval(() => {
+    const el = document.getElementById('timerDisplay');
+    if (!el) { clearInterval(timerInterval); return; }
+    const s = Math.floor((Date.now() - timerStarted) / 1000);
+    el.textContent = fmtDuration(s);
+  }, 1000);
+}
+
+async function startTimer(cardId) {
+  await api('POST', `/api/time/${cardId}/start`);
+  await renderDetailPanel();
+}
+
+async function stopTimer(cardId) {
+  clearInterval(timerInterval);
+  await api('POST', `/api/time/${cardId}/stop`);
+  await renderDetailPanel();
+  await loadBoard();
+}
+
+async function renderDetailDeps(card, el) {
+  try {
+    const { blocking, blocked } = await api('GET', `/api/deps/${card.id}`);
+    el.innerHTML = `
+      <div class="panel-section">
+        <h4>Blocked By (${blocking.length})</h4>
+        ${blocking.map(d => `
+          <div class="dep-card-item">
+            <span>${d.title} <small style="color:var(--text-muted)">(${d.column_name})</small></span>
+            ${canEditCard(card)?`<button class="btn btn-danger btn-sm" onclick="removeDep('${card.id}','${d.id}')">Remove</button>`:''}
+          </div>`).join('') || '<p style="color:var(--text-muted);font-size:.82rem">Not blocked by anything.</p>'}
+        ${canEditCard(card) ? `
+          <div style="display:flex;gap:.5rem;margin-top:.75rem">
+            <select id="depSelect" style="flex:1;padding:.4rem;border:1px solid var(--border);border-radius:6px;background:var(--input-bg);color:var(--text);font-size:.82rem">
+              <option value="">Select a blocking card…</option>
+              ${allCards.filter(c=>c.id!==card.id&&!c.is_archived).map(c=>`<option value="${c.id}">${c.title}</option>`).join('')}
+            </select>
+            <button class="btn btn-primary btn-sm" onclick="addDep('${card.id}')">Add</button>
+          </div>` : ''}
+      </div>
+      <div class="panel-section">
+        <h4>Blocking (${blocked.length})</h4>
+        ${blocked.map(d => `
+          <div class="dep-card-item">
+            <span>${d.title} <small style="color:var(--text-muted)">(${d.column_name})</small></span>
+          </div>`).join('') || '<p style="color:var(--text-muted);font-size:.82rem">Not blocking anything.</p>'}
+      </div>`;
+  } catch { el.innerHTML = '<p style="color:var(--text-muted)">Could not load dependencies.</p>'; }
+}
+
+async function addDep(cardId) {
+  const sel = document.getElementById('depSelect');
+  if (!sel.value) return;
+  try {
+    await api('POST', `/api/deps/${cardId}/block`, { blocking_card_id: sel.value });
+    await renderDetailPanel();
+    await loadBoard();
+  } catch (err) { alert(err.message); }
+}
+
+async function removeDep(cardId, blockingId) {
+  await api('DELETE', `/api/deps/${cardId}/block/${blockingId}`);
+  await renderDetailPanel();
+  await loadBoard();
+}
+
+async function renderDetailAttachments(card, el) {
+  try {
+    const attachments = await api('GET', `/api/cards/${card.id}/attachments`);
+    el.innerHTML = `
+      <div class="panel-section">
+        <h4>Attachments (${attachments.length})</h4>
+        ${attachments.map(a => `
+          <div class="attachment-item">
+            <span class="attachment-icon">📎</span>
+            <a class="attachment-name" href="/api/cards/${card.id}/attachments/${a.id}/download" target="_blank">${a.original_name}</a>
+            <span class="attachment-size">${(a.file_size/1024).toFixed(0)} KB</span>
+            ${canEditCard(card)?`<button class="btn btn-danger btn-sm" onclick="deleteAttachment('${card.id}','${a.id}')">Delete</button>`:''}
+          </div>`).join('') || '<p style="color:var(--text-muted);font-size:.82rem">No attachments yet.</p>'}
+        ${canEditCard(card) ? `
+          <div style="margin-top:.75rem">
+            <input type="file" id="attachFile" multiple style="font-size:.82rem"/>
+            <button class="btn btn-primary btn-sm" style="margin-top:.4rem" onclick="uploadAttachment('${card.id}')">Upload</button>
+          </div>` : ''}
+      </div>`;
+  } catch { el.innerHTML = '<p style="color:var(--text-muted)">Could not load attachments.</p>'; }
+}
+
+async function uploadAttachment(cardId) {
+  const inp = document.getElementById('attachFile');
+  if (!inp.files.length) return;
+  const form = new FormData();
+  for (const f of inp.files) form.append('file', f);
+  try {
+    await api('POST', `/api/cards/${cardId}/attachments`, form);
+    await renderDetailPanel();
+  } catch (err) { alert(err.message); }
+}
+
+async function deleteAttachment(cardId, attId) {
+  if (!confirm('Delete this attachment?')) return;
+  await api('DELETE', `/api/cards/${cardId}/attachments/${attId}`);
+  await renderDetailPanel();
+}
+
+async function renderDetailActivity(card, el) {
+  try {
+    const activity = await api('GET', `/api/cards/${card.id}/activity`);
+    const icons = { created:'🆕', moved:'➡️', edited:'✏️', comment_added:'💬',
+                    priority_changed:'🎯', assigned:'👤', archived:'📦', unarchived:'📤',
+                    subtask_added:'☑️', dependency_added:'⛔', created_from_template:'📋' };
+    el.innerHTML = `
+      <div class="panel-section">
+        <h4>Activity History (${activity.length})</h4>
+        ${activity.map(a => `
+          <div class="activity-item">
+            <div class="activity-icon">${icons[a.action]||'📌'}</div>
+            <div class="activity-body">
+              <strong>${a.username||'System'}</strong> ${formatActivity(a)}
+              <div class="activity-time">${timeAgo(a.created_at)}</div>
+            </div>
+          </div>`).join('') || '<p style="color:var(--text-muted);font-size:.82rem">No activity yet.</p>'}
+      </div>`;
+  } catch { el.innerHTML = '<p style="color:var(--text-muted)">Could not load activity.</p>'; }
+}
+
+function formatActivity(a) {
+  const d = typeof a.details === 'string' ? JSON.parse(a.details||'{}') : (a.details||{});
+  switch (a.action) {
+    case 'created':           return 'created this card';
+    case 'moved':             return `moved from <em>${d.from_column||'?'}</em> → <em>${d.to_column||'?'}</em>`;
+    case 'edited':            return 'edited this card';
+    case 'comment_added':     return 'added a comment';
+    case 'priority_changed':  return `changed priority from <em>${d.from}</em> → <em>${d.to}</em>`;
+    case 'assigned':          return `assigned to <em>${d.assignee||'?'}</em>`;
+    case 'archived':          return 'archived this card';
+    case 'unarchived':        return 'unarchived this card';
+    case 'subtask_added':     return `added subtask: <em>${d.title||'?'}</em>`;
+    case 'dependency_added':  return 'added a dependency';
+    case 'created_from_template': return `created from template <em>${d.template||'?'}</em>`;
+    default:                  return a.action.replace(/_/g,' ');
+  }
+}
+
+// ── Activity Feed ──────────────────────────────────────────────
+async function loadActivityFeed() {
+  try {
+    const feed = await api('GET', '/api/cards/board-activity');
+    const el = document.getElementById('feedList');
+    const icons = { created:'🆕', moved:'➡️', edited:'✏️', comment_added:'💬',
+                    priority_changed:'🎯', assigned:'👤', archived:'📦' };
+    el.innerHTML = feed.map(f => `
+      <div class="feed-item">
+        <div class="feed-item-icon">${icons[f.action]||'📌'}</div>
+        <div class="feed-item-body">
+          <strong>${f.username||'System'}</strong> ${formatActivity(f)} on <em>${f.card_title||'a card'}</em>
+          <div class="feed-item-time">${timeAgo(f.created_at)}</div>
+        </div>
+      </div>`).join('') || '<p style="padding:1rem;color:var(--text-muted);font-size:.82rem">No recent activity.</p>';
+  } catch {}
+}
+
+// ── Notifications ──────────────────────────────────────────────
+async function loadNotifications() {
+  try {
+    const notifs = await api('GET', '/api/cards/notifications');
+    const unread = notifs.filter(n => !n.is_read).length;
+    const badge = document.getElementById('notifBadge');
+    badge.textContent = unread;
+    badge.style.display = unread > 0 ? 'flex' : 'none';
+  } catch {}
+}
+
+async function openNotifications() {
+  try {
+    const notifs = await api('GET', '/api/cards/notifications');
+    const el = document.getElementById('notifList');
+    el.innerHTML = notifs.map(n => `
+      <div class="notif-item ${n.is_read?'':'unread'}" onclick="markRead('${n.id}')">
+        <div>${n.message}</div>
+        <div class="notif-item-time">${timeAgo(n.created_at)}</div>
+      </div>`).join('') || '<p style="padding:1rem;color:var(--text-muted);font-size:.82rem">No notifications.</p>';
+    document.getElementById('notifModal').showModal();
+  } catch {}
+}
+
+async function markRead(notifId) {
+  await api('PATCH', `/api/cards/notifications/${notifId}/read`).catch(()=>{});
+  await openNotifications();
+  loadNotifications();
+}
+
+document.getElementById('markAllReadBtn').addEventListener('click', async () => {
+  await api('POST', '/api/cards/notifications/read-all').catch(()=>{});
+  await openNotifications();
+  loadNotifications();
+});
+
+// ── Analytics ──────────────────────────────────────────────────
+async function openAnalytics() {
+  document.getElementById('analyticsModal').showModal();
+  const el = document.getElementById('analyticsBody');
+  el.innerHTML = '<p style="color:var(--text-muted)">Loading analytics…</p>';
+  try {
+    const data = await api('GET', `/api/boards/${currentBoardId}/analytics`);
+    const maxCol = Math.max(...data.by_column.map(r=>parseInt(r.active_count)||0), 1);
+    const maxPri = Math.max(...data.by_priority.map(r=>parseInt(r.count)||0), 1);
+    const maxAss = Math.max(...data.by_assignee.map(r=>parseInt(r.card_count)||0), 1);
+    el.innerHTML = `
+      <div class="analytics-grid">
+        <div class="stat-card"><div class="stat-value">${data.by_column.reduce((s,r)=>s+parseInt(r.active_count||0),0)}</div><div class="stat-label">Active Cards</div></div>
+        <div class="stat-card"><div class="stat-value" style="color:#e53e3e">${data.overdue_count}</div><div class="stat-label">Overdue</div></div>
+        <div class="stat-card"><div class="stat-value">${data.wip_violations.length}</div><div class="stat-label">WIP Violations</div></div>
+        <div class="stat-card"><div class="stat-value">${data.time_tracked.reduce((s,r)=>s+parseInt(r.total_seconds||0),0) > 0 ? fmtDuration(data.time_tracked.reduce((s,r)=>s+parseInt(r.total_seconds||0),0)) : '0m'}</div><div class="stat-label">Total Time Logged</div></div>
+      </div>
+      <h4 style="font-size:.78rem;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin-bottom:.6rem">Cards per Column</h4>
+      ${data.by_column.map(r=>`
+        <div class="chart-bar-row">
+          <span class="chart-bar-label">${r.column_name}</span>
+          <div class="chart-bar-track"><div class="chart-bar-fill" style="width:${Math.round(parseInt(r.active_count||0)/maxCol*100)}%"></div></div>
+          <span class="chart-bar-val">${r.active_count}</span>
+        </div>`).join('')}
+      <h4 style="font-size:.78rem;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin:.8rem 0 .6rem">Cards per Priority</h4>
+      ${data.by_priority.map(r=>`
+        <div class="chart-bar-row">
+          <span class="chart-bar-label">${r.priority}</span>
+          <div class="chart-bar-track"><div class="chart-bar-fill" style="width:${Math.round(parseInt(r.count)/maxPri*100)}%"></div></div>
+          <span class="chart-bar-val">${r.count}</span>
+        </div>`).join('')}
+      ${data.by_assignee.length ? `
+        <h4 style="font-size:.78rem;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin:.8rem 0 .6rem">Cards per Assignee</h4>
+        ${data.by_assignee.map(r=>`
+          <div class="chart-bar-row">
+            <span class="chart-bar-label">${r.username}</span>
+            <div class="chart-bar-track"><div class="chart-bar-fill" style="width:${Math.round(parseInt(r.card_count)/maxAss*100)}%"></div></div>
+            <span class="chart-bar-val">${r.card_count}</span>
+          </div>`).join('')}` : ''}
+      ${data.wip_violations.length ? `
+        <h4 style="font-size:.78rem;text-transform:uppercase;letter-spacing:.05em;color:#e53e3e;margin:.8rem 0 .6rem">⚠️ WIP Limit Violations</h4>
+        ${data.wip_violations.map(r=>`
+          <div style="font-size:.82rem;padding:.3rem 0;border-bottom:1px solid var(--border)">
+            <strong>${r.name}</strong>: ${r.current_count} cards (limit: ${r.wip_limit})
+          </div>`).join('')}` : ''}`;
+  } catch (err) {
+    el.innerHTML = `<p style="color:#e53e3e">Could not load analytics: ${err.message}</p>`;
+  }
+}
+
+// ── CSV Export ─────────────────────────────────────────────────
+function exportCsv() {
+  const cards = getFilteredCards();
+  const headers = ['ID','Title','Description','Priority','Visibility','Column','Owner','Assignee','Due Date','Archived','Created'];
+  const rows = cards.map(c => [
+    c.id, `"${(c.title||'').replace(/"/g,'""')}"`,
+    `"${(c.description||'').replace(/"/g,'""')}"`,
+    c.priority, c.visibility,
+    `"${columns.find(col=>col.id===c.column_id)?.name||''}"`,
+    c.owner_username||'', c.assignee_username||'',
+    c.due_date ? new Date(c.due_date).toISOString() : '',
+    c.is_archived ? 'Yes' : 'No',
+    new Date(c.created_at).toISOString()
+  ]);
+  const csv = [headers.join(','), ...rows.map(r=>r.join(','))].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = `kanban-export-${new Date().toISOString().slice(0,10)}.csv`;
+  a.click(); URL.revokeObjectURL(url);
+}
+
+// ── Change Password ────────────────────────────────────────────
+document.getElementById('savePwBtn').addEventListener('click', async () => {
+  hideError('pwError');
+  const current = document.getElementById('currentPw').value;
+  const newPw   = document.getElementById('newPw').value;
+  const confirm = document.getElementById('confirmPw').value;
+  if (!current || !newPw || !confirm) return showError('pwError', 'All fields are required.');
+  if (newPw !== confirm) return showError('pwError', 'New passwords do not match.');
+  if (newPw.length < 8) return showError('pwError', 'Password must be at least 8 characters.');
+  try {
+    await api('POST', '/api/auth/change-password', { currentPassword: current, newPassword: newPw });
+    document.getElementById('passwordModal').close();
+    document.getElementById('currentPw').value = '';
+    document.getElementById('newPw').value = '';
+    document.getElementById('confirmPw').value = '';
+    alert('Password updated successfully!');
+  } catch (err) { showError('pwError', err.message); }
+});
+
+// ── Save View ──────────────────────────────────────────────────
+document.getElementById('confirmSaveView').addEventListener('click', async () => {
+  const name = document.getElementById('viewName').value.trim();
+  if (!name) return alert('Please enter a view name.');
+  try {
+    await api('POST', '/api/cards/views', { name, filters: activeFilters });
+    document.getElementById('saveViewModal').close();
+    document.getElementById('viewName').value = '';
+    await loadSavedViews();
+  } catch (err) { alert(err.message); }
+});
+
+// ── Logout ─────────────────────────────────────────────────────
+document.getElementById('logoutBtn').addEventListener('click', async () => {
+  await api('POST', '/api/auth/logout').catch(()=>{});
+  location.reload();
+});
+
+// ── Filter Events ──────────────────────────────────────────────
+document.getElementById('searchInput').addEventListener('input', e => {
+  activeFilters.search = e.target.value.trim();
+  renderBoard();
+});
+document.getElementById('filterPriority').addEventListener('change', e => {
+  activeFilters.priority = e.target.value;
+  renderBoard();
+});
+document.getElementById('filterAssignee').addEventListener('change', e => {
+  activeFilters.assignee = e.target.value;
+  renderBoard();
+});
+document.getElementById('filterLabel').addEventListener('change', e => {
+  activeFilters.label = e.target.value;
+  renderBoard();
+});
+document.getElementById('showArchived').addEventListener('change', () => renderBoard());
+
+// ── Button Events ──────────────────────────────────────────────
+document.getElementById('themeToggle').addEventListener('click', toggleTheme);
+document.getElementById('changePwBtn').addEventListener('click', () => document.getElementById('passwordModal').showModal());
+document.getElementById('saveViewBtn').addEventListener('click', () => document.getElementById('saveViewModal').showModal());
+document.getElementById('exportCsvBtn').addEventListener('click', exportCsv);
+document.getElementById('analyticsBtn').addEventListener('click', openAnalytics);
+document.getElementById('activityFeedBtn').addEventListener('click', () => {
+  document.getElementById('activityFeed').classList.toggle('open');
+  loadActivityFeed();
+});
+document.getElementById('notifBtn').addEventListener('click', openNotifications);
+document.getElementById('shortcutBtn').addEventListener('click', () => document.getElementById('shortcutOverlay').classList.add('show'));
+
+// Close buttons
+document.getElementById('closeDetail').addEventListener('click', () => {
+  document.getElementById('detailPanel').classList.remove('open');
+  clearInterval(timerInterval);
+});
+document.getElementById('closeFeed').addEventListener('click', () => document.getElementById('activityFeed').classList.remove('open'));
+document.getElementById('closeNotif').addEventListener('click', () => document.getElementById('notifModal').close());
+document.getElementById('closeCardModal').addEventListener('click', () => document.getElementById('cardModal').close());
+document.getElementById('cancelCardBtn').addEventListener('click', () => document.getElementById('cardModal').close());
+document.getElementById('closePasswordModal').addEventListener('click', () => document.getElementById('passwordModal').close());
+document.getElementById('cancelPwBtn').addEventListener('click', () => document.getElementById('passwordModal').close());
+document.getElementById('closeSaveView').addEventListener('click', () => document.getElementById('saveViewModal').close());
+document.getElementById('cancelSaveView').addEventListener('click', () => document.getElementById('saveViewModal').close());
+document.getElementById('closeAnalytics').addEventListener('click', () => document.getElementById('analyticsModal').close());
+document.getElementById('cancelColumnBtn').addEventListener('click', () => document.getElementById('columnModal').close());
+document.getElementById('closeColumnModal').addEventListener('click', () => document.getElementById('columnModal').close());
+document.getElementById('shortcutOverlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('shortcutOverlay')) document.getElementById('shortcutOverlay').classList.remove('show');
+});
+
+// ── Keyboard Shortcuts ─────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  const tag = document.activeElement?.tagName;
+  if (['INPUT','TEXTAREA','SELECT'].includes(tag)) return;
+  if (e.target.contentEditable === 'true') return;
+  switch (e.key) {
+    case 'n': case 'N':
+      if (!e.shiftKey && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        openNewCard(columns[0]?.id);
+      }
+      break;
+    case 'f': case 'F':
+      e.preventDefault();
+      document.getElementById('searchInput').focus();
+      break;
+    case 'd': case 'D':
+      toggleTheme();
+      break;
+    case 'a':
+      document.getElementById('activityFeed').classList.toggle('open');
+      loadActivityFeed();
+      break;
+    case 'A':
+      if (e.shiftKey) openAnalytics();
+      break;
+    case 'b': case 'B':
+      openNotifications();
+      break;
+    case '?':
+      document.getElementById('shortcutOverlay').classList.add('show');
+      break;
+    case 'Escape':
+      document.getElementById('detailPanel').classList.remove('open');
+      document.getElementById('activityFeed').classList.remove('open');
+      document.getElementById('shortcutOverlay').classList.remove('show');
+      document.querySelectorAll('dialog[open]').forEach(d => d.close());
+      break;
+  }
+});
+
+// ── Bootstrap ──────────────────────────────────────────────────
+(async () => {
+  try {
+    const me = await api('GET', '/api/auth/me');
+    currentUser = me;
+    await bootApp();
+  } catch {
+    document.getElementById('loginScreen').style.display = 'flex';
+  }
 })();
 </script>
 </body>
