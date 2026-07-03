@@ -1,0 +1,1065 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kanban Board</title>
+    <style>
+        /* ------------------------------------------------------------------ */
+        /* Reset & base                                                         */
+        /* ------------------------------------------------------------------ */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #f0f2f5; color: #2c3e50; }
+
+        /* ------------------------------------------------------------------ */
+        /* Login screen                                                         */
+        /* ------------------------------------------------------------------ */
+        #login-screen {
+            display: flex; justify-content: center; align-items: center;
+            min-height: 100vh; background: linear-gradient(135deg, #2c3e50, #3498db);
+        }
+        .login-box {
+            background: white; padding: 2.5rem; border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.2); width: 340px;
+        }
+        .login-box h2 { margin-bottom: 1.5rem; text-align: center; color: #2c3e50; }
+        .form-group { margin-bottom: 1rem; }
+        .form-group label { display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.3rem; }
+        .form-group input, .form-group select, .form-group textarea {
+            width: 100%; padding: 0.6rem 0.75rem; border: 1px solid #ddd;
+            border-radius: 6px; font-size: 0.95rem; transition: border-color 0.2s;
+        }
+        .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+            outline: none; border-color: #3498db;
+        }
+        .btn {
+            display: inline-block; padding: 0.6rem 1.2rem; border: none;
+            border-radius: 6px; font-size: 0.9rem; font-weight: 600;
+            cursor: pointer; transition: opacity 0.2s, transform 0.1s;
+            text-decoration: none;
+        }
+        .btn:hover { opacity: 0.9; }
+        .btn:active { transform: scale(0.98); }
+        .btn-primary   { background: #3498db; color: white; }
+        .btn-success   { background: #27ae60; color: white; }
+        .btn-danger    { background: #e74c3c; color: white; }
+        .btn-secondary { background: #95a5a6; color: white; }
+        .btn-warning   { background: #f39c12; color: white; }
+        .btn-full      { width: 100%; }
+        .btn-sm        { padding: 0.25rem 0.5rem; font-size: 0.7rem; }
+        .login-link { text-align: center; margin-top: 1rem; font-size: 0.85rem; }
+        .login-link a { color: #3498db; text-decoration: none; }
+
+        /* ------------------------------------------------------------------ */
+        /* App header                                                           */
+        /* ------------------------------------------------------------------ */
+        #app-header {
+            background: #2c3e50; color: white; padding: 0.75rem 1.5rem;
+            display: flex; justify-content: space-between; align-items: center;
+            position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        }
+        #app-header h1 { font-size: 1.25rem; }
+        .header-actions { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+        #user-badge {
+            font-size: 0.8rem; background: rgba(255,255,255,0.15);
+            padding: 0.3rem 0.75rem; border-radius: 20px;
+        }
+        #user-badge .role-tag {
+            font-weight: 700; text-transform: uppercase; font-size: 0.7rem;
+            margin-left: 0.4rem; padding: 0.1rem 0.4rem; border-radius: 4px;
+            background: #3498db;
+        }
+        #user-badge .role-tag.admin { background: #e74c3c; }
+
+        /* ------------------------------------------------------------------ */
+        /* Board                                                                */
+        /* ------------------------------------------------------------------ */
+        #board-container { display: none; }
+        .board-toolbar {
+            padding: 0.75rem 1.5rem; background: white;
+            border-bottom: 1px solid #e0e0e0;
+            display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;
+        }
+        .search-filter-bar {
+            display: flex; gap: 0.5rem; align-items: center; flex: 1;
+            min-width: 200px;
+        }
+        .search-filter-bar input {
+            padding: 0.4rem 0.75rem; border: 1px solid #ddd; border-radius: 6px;
+            font-size: 0.85rem; width: 180px;
+        }
+        .search-filter-bar select {
+            padding: 0.4rem 0.5rem; border: 1px solid #ddd; border-radius: 6px;
+            font-size: 0.85rem;
+        }
+        .priority-legend {
+            display: flex; gap: 0.5rem; align-items: center;
+            font-size: 0.72rem; color: #7f8c8d;
+        }
+        .priority-legend .legend-item { display: flex; align-items: center; gap: 0.2rem; }
+        .priority-legend .legend-swatch { width: 12px; height: 12px; border-radius: 3px; }
+        .board {
+            display: flex; overflow-x: auto; padding: 1.25rem;
+            gap: 1rem; min-height: calc(100vh - 145px);
+        }
+        .column {
+            min-width: 280px; max-width: 280px; background: #e8eaec;
+            border-radius: 10px; padding: 0.75rem; flex-shrink: 0;
+            display: flex; flex-direction: column; transition: background 0.2s;
+        }
+        .column-header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 0.75rem; padding-bottom: 0.5rem;
+            border-bottom: 2px solid #d0d3d7;
+        }
+        .column-title { font-weight: 700; color: #2c3e50; }
+        .wip-counter  { font-size: 0.75rem; color: #7f8c8d; }
+        .wip-exceeded { color: #e74c3c; font-weight: 700; }
+        .cards-container {
+            flex: 1; min-height: 60px; padding: 4px; border-radius: 6px;
+            transition: background 0.2s, border 0.2s;
+            border: 2px solid transparent;
+        }
+        .cards-container.drag-over {
+            background: rgba(52, 152, 219, 0.1);
+            border: 2px dashed #3498db;
+        }
+
+        /* ------------------------------------------------------------------ */
+        /* Cards — 5-level priority color system                                */
+        /* ------------------------------------------------------------------ */
+        .card {
+            background: white; border-radius: 8px; padding: 0.75rem;
+            margin-bottom: 0.5rem; cursor: grab;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+            transition: transform 0.15s, box-shadow 0.15s, opacity 0.15s;
+            border-left: 5px solid #bdc3c7;
+            position: relative; user-select: none;
+        }
+        .card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+        .card.dragging { opacity: 0.4; transform: rotate(2deg) scale(1.02); cursor: grabbing; }
+        .card.drop-indicator-above { border-top: 3px solid #3498db; }
+        .card.drop-indicator-below { border-bottom: 3px solid #3498db; }
+        .card.filtered-out { display: none; }
+
+        .card.priority-critical { border-left-color: #e74c3c; background: #fdf2f2; }
+        .card.priority-high     { border-left-color: #e67e22; background: #fef9f3; }
+        .card.priority-medium   { border-left-color: #f1c40f; background: #fefef3; }
+        .card.priority-low      { border-left-color: #27ae60; background: #f3fef6; }
+        .card.priority-minimal  { border-left-color: #3498db; background: #f3f9fe; }
+
+        .card-title { font-weight: 600; font-size: 0.9rem; margin-bottom: 0.4rem; word-break: break-word; }
+        .card-meta {
+            font-size: 0.75rem; color: #95a5a6;
+            display: flex; justify-content: space-between; align-items: center;
+            flex-wrap: wrap; gap: 0.2rem;
+        }
+        .card-priority-tag {
+            display: inline-block; font-size: 0.65rem; font-weight: 700;
+            text-transform: uppercase; padding: 0.1rem 0.4rem;
+            border-radius: 3px; letter-spacing: 0.3px;
+        }
+        .card-priority-tag.critical { background: #e74c3c; color: white; }
+        .card-priority-tag.high     { background: #e67e22; color: white; }
+        .card-priority-tag.medium   { background: #f1c40f; color: #2c3e50; }
+        .card-priority-tag.low      { background: #27ae60; color: white; }
+        .card-priority-tag.minimal  { background: #3498db; color: white; }
+
+        .card-actions { display: flex; gap: 0.3rem; margin-top: 0.5rem; justify-content: flex-end; }
+
+        .visibility-badge {
+            display: inline-flex; align-items: center; gap: 0.2rem;
+            font-size: 0.65rem; font-weight: 600; padding: 0.1rem 0.35rem;
+            border-radius: 3px; text-transform: uppercase;
+        }
+        .visibility-badge.public  { background: #d5f5e3; color: #1e8449; }
+        .visibility-badge.private { background: #fde8e8; color: #c0392b; }
+
+        .comment-count-badge {
+            font-size: 0.7rem; color: #7f8c8d;
+        }
+
+        /* ------------------------------------------------------------------ */
+        /* Dialog / Modal                                                       */
+        /* ------------------------------------------------------------------ */
+        dialog {
+            border: none; border-radius: 12px; padding: 0;
+            box-shadow: 0 8px 40px rgba(0,0,0,0.25);
+            max-width: 95vw;
+        }
+        dialog::backdrop { background: rgba(0,0,0,0.4); }
+        .modal-header {
+            padding: 1.25rem 1.5rem; border-bottom: 1px solid #eee;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .modal-header h2 { font-size: 1.1rem; }
+        .modal-close { background: none; border: none; font-size: 1.4rem; cursor: pointer; color: #7f8c8d; }
+        .modal-body { padding: 1.5rem; max-height: 70vh; overflow-y: auto; }
+        .modal-footer { padding: 1rem 1.5rem; border-top: 1px solid #eee; display: flex; gap: 0.75rem; justify-content: flex-end; }
+
+        #cardModal { width: 460px; }
+        #detailModal { width: 600px; }
+        #passwordModal { width: 420px; }
+
+        .visibility-toggle {
+            display: flex; align-items: center; gap: 0.75rem;
+            padding: 0.75rem; background: #f8f9fa; border-radius: 8px; margin-top: 0.5rem;
+        }
+        .toggle-switch { position: relative; display: inline-block; width: 46px; height: 24px; }
+        .toggle-switch input { opacity: 0; width: 0; height: 0; }
+        .toggle-slider {
+            position: absolute; cursor: pointer; inset: 0;
+            background: #ccc; border-radius: 24px; transition: 0.3s;
+        }
+        .toggle-slider::before {
+            content: ''; position: absolute; height: 18px; width: 18px;
+            left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: 0.3s;
+        }
+        input:checked + .toggle-slider { background: #27ae60; }
+        input:checked + .toggle-slider::before { transform: translateX(22px); }
+        .toggle-label { font-size: 0.85rem; font-weight: 600; }
+
+        /* ------------------------------------------------------------------ */
+        /* Card Detail Panel                                                    */
+        /* ------------------------------------------------------------------ */
+        .detail-section { margin-bottom: 1.5rem; }
+        .detail-section h3 {
+            font-size: 0.9rem; color: #2c3e50; margin-bottom: 0.5rem;
+            border-bottom: 1px solid #eee; padding-bottom: 0.3rem;
+        }
+        .activity-timeline { list-style: none; padding: 0; }
+        .activity-timeline li {
+            padding: 0.4rem 0; border-bottom: 1px solid #f5f5f5;
+            font-size: 0.8rem; color: #555;
+        }
+        .activity-timeline .activity-time {
+            font-size: 0.7rem; color: #999; margin-left: 0.5rem;
+        }
+        .activity-timeline .activity-user { font-weight: 600; color: #2c3e50; }
+        .comment-list { list-style: none; padding: 0; }
+        .comment-item {
+            padding: 0.6rem; background: #f8f9fa; border-radius: 6px;
+            margin-bottom: 0.5rem; position: relative;
+        }
+        .comment-item .comment-header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 0.3rem;
+        }
+        .comment-item .comment-author { font-weight: 600; font-size: 0.8rem; color: #2c3e50; }
+        .comment-item .comment-time { font-size: 0.7rem; color: #999; }
+        .comment-item .comment-body { font-size: 0.85rem; color: #333; white-space: pre-wrap; }
+        .comment-item .comment-delete-btn {
+            background: none; border: none; color: #e74c3c; cursor: pointer;
+            font-size: 0.75rem; font-weight: 600;
+        }
+        .comment-form { display: flex; gap: 0.5rem; margin-top: 0.5rem; }
+        .comment-form textarea {
+            flex: 1; padding: 0.5rem; border: 1px solid #ddd; border-radius: 6px;
+            font-size: 0.85rem; resize: vertical; min-height: 50px;
+        }
+
+        /* ------------------------------------------------------------------ */
+        /* Alerts                                                               */
+        /* ------------------------------------------------------------------ */
+        .alert { padding: 0.75rem 1rem; border-radius: 6px; margin-bottom: 1rem; font-size: 0.875rem; }
+        .alert-error   { background: #fde8e8; color: #c0392b; border: 1px solid #f5c6cb; }
+        .alert-success { background: #d5f5e3; color: #1e8449; border: 1px solid #c3e6cb; }
+
+        .empty-board-msg { text-align: center; padding: 4rem 2rem; color: #7f8c8d; }
+        .empty-board-msg h3 { margin-bottom: 0.5rem; color: #2c3e50; }
+
+        @media (max-width: 600px) {
+            .header-actions { gap: 0.4rem; }
+            .btn { padding: 0.4rem 0.8rem; font-size: 0.8rem; }
+            .board { padding: 0.75rem; gap: 0.75rem; }
+            .column { min-width: 260px; max-width: 260px; }
+            .search-filter-bar input { width: 120px; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- LOGIN SCREEN -->
+<div id="login-screen">
+    <div class="login-box">
+        <h2>Kanban Board</h2>
+        <div id="login-error" class="alert alert-error" style="display:none;"></div>
+        <form id="loginForm">
+            <div class="form-group">
+                <label for="login-username">Username</label>
+                <input type="text" id="login-username" name="username" autocomplete="username" required>
+            </div>
+            <div class="form-group">
+                <label for="login-password">Password</label>
+                <input type="password" id="login-password" name="password" autocomplete="current-password" required>
+            </div>
+            <button type="submit" class="btn btn-primary btn-full">Sign In</button>
+        </form>
+        <div class="login-link">
+            Have an invite? <a href="/register.html">Create your account</a>
+        </div>
+    </div>
+</div>
+
+<!-- MAIN APP -->
+<div id="board-container">
+    <header id="app-header">
+        <h1>Kanban Board</h1>
+        <div class="header-actions">
+            <span id="user-badge"></span>
+            <button id="changePasswordBtn" class="btn btn-warning">Change Password</button>
+            <a id="adminLink" href="/admin.html" class="btn btn-danger" style="display:none;">Admin</a>
+            <button id="logoutBtn" class="btn btn-secondary">Logout</button>
+        </div>
+    </header>
+
+    <div class="board-toolbar">
+        <button id="addCardBtn" class="btn btn-primary">+ Add Card</button>
+        <div class="search-filter-bar">
+            <input type="text" id="searchInput" placeholder="Search cards...">
+            <select id="filterPriority">
+                <option value="">All Priorities</option>
+                <option value="critical">Critical</option>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+                <option value="minimal">Minimal</option>
+            </select>
+            <select id="filterAssignee">
+                <option value="">All Assignees</option>
+            </select>
+        </div>
+        <div class="priority-legend">
+            <span class="legend-item"><span class="legend-swatch" style="background:#e74c3c;"></span>Critical</span>
+            <span class="legend-item"><span class="legend-swatch" style="background:#e67e22;"></span>High</span>
+            <span class="legend-item"><span class="legend-swatch" style="background:#f1c40f;"></span>Medium</span>
+            <span class="legend-item"><span class="legend-swatch" style="background:#27ae60;"></span>Low</span>
+            <span class="legend-item"><span class="legend-swatch" style="background:#3498db;"></span>Minimal</span>
+        </div>
+    </div>
+
+    <div class="board" id="kanban-board"></div>
+</div>
+
+<!-- CARD EDITOR MODAL -->
+<dialog id="cardModal">
+    <div class="modal-header">
+        <h2 id="modalTitle">New Card</h2>
+        <button class="modal-close" id="modalClose">&times;</button>
+    </div>
+    <div class="modal-body">
+        <div id="modal-error" class="alert alert-error" style="display:none;"></div>
+        <form id="cardForm">
+            <input type="hidden" id="cardId">
+            <div class="form-group">
+                <label for="cardTitle">Title *</label>
+                <input type="text" id="cardTitle" name="title" required maxlength="200">
+            </div>
+            <div class="form-group">
+                <label for="cardDescription">Description</label>
+                <textarea id="cardDescription" name="description" rows="3"></textarea>
+            </div>
+            <div class="form-group">
+                <label for="cardPriority">Priority</label>
+                <select id="cardPriority" name="priority">
+                    <option value="critical">Critical (Red)</option>
+                    <option value="high">High (Orange)</option>
+                    <option value="medium" selected>Medium (Yellow)</option>
+                    <option value="low">Low (Green)</option>
+                    <option value="minimal">Minimal (Blue)</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="cardColumn">Column *</label>
+                <select id="cardColumn" name="column_id" required></select>
+                <div id="noColumnsWarning" class="alert alert-error" style="display:none;margin-top:0.5rem;">
+                    No columns exist yet. An admin must create columns first.
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="cardAssignee">Assignee (username)</label>
+                <input type="text" id="cardAssignee" name="assignee" placeholder="Leave blank for unassigned">
+            </div>
+            <div class="visibility-toggle">
+                <label class="toggle-switch">
+                    <input type="checkbox" id="cardPublished" name="published" checked>
+                    <span class="toggle-slider"></span>
+                </label>
+                <div>
+                    <div class="toggle-label" id="visibilityLabel">Published (visible to everyone)</div>
+                    <div style="font-size:0.75rem;color:#7f8c8d;">
+                        When private, only you, your assignee, and admins can see this card.
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+    <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="modalCancelBtn">Cancel</button>
+        <button type="button" class="btn btn-danger" id="deleteCardBtn" style="display:none;">Delete</button>
+        <button type="button" class="btn btn-primary" id="saveCardBtn">Save Card</button>
+    </div>
+</dialog>
+
+<!-- CARD DETAIL MODAL (Activity + Comments) -->
+<dialog id="detailModal">
+    <div class="modal-header">
+        <h2 id="detailTitle">Card Details</h2>
+        <button class="modal-close" id="detailClose">&times;</button>
+    </div>
+    <div class="modal-body">
+        <div id="detailInfo" style="margin-bottom:1rem;"></div>
+
+        <div class="detail-section">
+            <h3>Comments</h3>
+            <ul class="comment-list" id="commentList"></ul>
+            <div class="comment-form">
+                <textarea id="newCommentBody" placeholder="Add a comment..."></textarea>
+                <button class="btn btn-primary btn-sm" id="postCommentBtn" style="align-self:flex-end;padding:0.4rem 0.8rem;">Post</button>
+            </div>
+        </div>
+
+        <div class="detail-section">
+            <h3>Activity Timeline</h3>
+            <ul class="activity-timeline" id="activityTimeline"></ul>
+        </div>
+    </div>
+    <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="detailCloseBtn">Close</button>
+    </div>
+</dialog>
+
+<!-- CHANGE PASSWORD MODAL -->
+<dialog id="passwordModal">
+    <div class="modal-header">
+        <h2>Change Password</h2>
+        <button class="modal-close" id="pwModalClose">&times;</button>
+    </div>
+    <div class="modal-body">
+        <div id="pw-error" class="alert alert-error" style="display:none;"></div>
+        <div id="pw-success" class="alert alert-success" style="display:none;"></div>
+        <form id="passwordForm">
+            <div class="form-group">
+                <label for="currentPassword">Current Password</label>
+                <input type="password" id="currentPassword" autocomplete="current-password" required>
+            </div>
+            <div class="form-group">
+                <label for="newPassword">New Password</label>
+                <input type="password" id="newPassword" minlength="8" autocomplete="new-password" required>
+                <div style="font-size:0.75rem;color:#7f8c8d;margin-top:0.25rem;">At least 8 characters.</div>
+            </div>
+            <div class="form-group">
+                <label for="confirmNewPassword">Confirm New Password</label>
+                <input type="password" id="confirmNewPassword" autocomplete="new-password" required>
+            </div>
+        </form>
+    </div>
+    <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="pwCancelBtn">Cancel</button>
+        <button type="button" class="btn btn-primary" id="pwSaveBtn">Update Password</button>
+    </div>
+</dialog>
+
+<script>
+// ============================================================================
+// State
+// ============================================================================
+let currentUser = null;
+let columns     = [];
+let cards       = [];
+let dragState   = { cardId: null, sourceColumnId: null, sourcePosition: null };
+
+// ============================================================================
+// API helper
+// ============================================================================
+async function api(method, path, body) {
+    const opts = {
+        method,
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+    };
+    if (body !== undefined) opts.body = JSON.stringify(body);
+
+    const res = await fetch(path, opts);
+    if (res.status === 401) { showLogin(); return null; }
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    return data;
+}
+
+// ============================================================================
+// Auth
+// ============================================================================
+function showLogin() {
+    document.getElementById('login-screen').style.display = 'flex';
+    document.getElementById('board-container').style.display = 'none';
+    currentUser = null;
+}
+function showBoard() {
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('board-container').style.display = 'block';
+}
+
+document.getElementById('loginForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const errEl = document.getElementById('login-error');
+    errEl.style.display = 'none';
+    try {
+        const data = await api('POST', '/api/auth/login', {
+            username: e.target.username.value.trim(),
+            password: e.target.password.value,
+        });
+        if (!data) return;
+        currentUser = data;
+        if (!currentUser.id) {
+            const me = await api('GET', '/api/auth/me');
+            if (me) currentUser = me;
+        }
+        renderUserBadge();
+        showBoard();
+        await loadBoard();
+    } catch (err) {
+        errEl.textContent = err.message;
+        errEl.style.display = 'block';
+    }
+});
+
+document.getElementById('logoutBtn').addEventListener('click', async () => {
+    await api('POST', '/api/auth/logout').catch(() => {});
+    showLogin();
+});
+
+function renderUserBadge() {
+    const badge = document.getElementById('user-badge');
+    badge.innerHTML = `${escapeHtml(currentUser.username)}
+        <span class="role-tag ${currentUser.role}">${currentUser.role}</span>`;
+    document.getElementById('adminLink').style.display =
+        currentUser.role === 'admin' ? 'inline-block' : 'none';
+}
+
+// ============================================================================
+// Board loading & rendering
+// ============================================================================
+async function loadBoard() {
+    try {
+        const [colData, cardData] = await Promise.all([
+            api('GET', '/api/columns'),
+            api('GET', '/api/cards'),
+        ]);
+        columns = colData || [];
+        cards   = cardData || [];
+        populateAssigneeFilter();
+        renderBoard();
+    } catch (err) {
+        console.error('Failed to load board:', err);
+    }
+}
+
+function populateAssigneeFilter() {
+    const select = document.getElementById('filterAssignee');
+    const current = select.value;
+    const assignees = new Set();
+    cards.forEach(c => {
+        if (c.owner_username) assignees.add(c.owner_username);
+        if (c.assignee_username) assignees.add(c.assignee_username);
+    });
+    select.innerHTML = '<option value="">All Assignees</option>' +
+        [...assignees].sort().map(u => `<option value="${escapeHtml(u)}">${escapeHtml(u)}</option>`).join('');
+    select.value = current;
+}
+
+function getFilteredCards() {
+    const search   = document.getElementById('searchInput').value.toLowerCase().trim();
+    const priority = document.getElementById('filterPriority').value;
+    const assignee = document.getElementById('filterAssignee').value;
+
+    return cards.filter(c => {
+        if (search && !c.title.toLowerCase().includes(search) &&
+            !(c.description || '').toLowerCase().includes(search)) return false;
+        if (priority && c.priority !== priority) return false;
+        if (assignee && c.owner_username !== assignee && c.assignee_username !== assignee) return false;
+        return true;
+    });
+}
+
+function renderBoard() {
+    const board = document.getElementById('kanban-board');
+    const filteredCards = getFilteredCards();
+    const filteredIds = new Set(filteredCards.map(c => c.id));
+
+    if (columns.length === 0) {
+        board.innerHTML = `<div class="empty-board-msg"><h3>No columns configured</h3>
+            <p>${currentUser?.role === 'admin'
+                ? 'Go to the <a href="/admin.html">Admin Dashboard</a> to set up board columns.'
+                : 'Please ask an administrator to set up the board columns.'}</p></div>`;
+        return;
+    }
+
+    board.innerHTML = columns.map(col => {
+        const colCards = cards.filter(c => c.column_id == col.id)
+                              .sort((a, b) => a.position_in_column - b.position_in_column);
+        const count    = colCards.length;
+        const atLimit  = col.wip_limit && count >= col.wip_limit;
+
+        return `
+        <div class="column" data-column-id="${col.id}">
+            <div class="column-header">
+                <span class="column-title">${escapeHtml(col.name)}</span>
+                <span class="wip-counter ${atLimit ? 'wip-exceeded' : ''}">
+                    ${count}${col.wip_limit ? ' / ' + col.wip_limit : ''}
+                </span>
+            </div>
+            <div class="cards-container" data-column-id="${col.id}">
+                ${colCards.map(card => renderCard(card, filteredIds.has(card.id))).join('')}
+            </div>
+        </div>`;
+    }).join('');
+
+    attachDragListeners();
+}
+
+function renderCard(card, visible) {
+    const isOwner = currentUser && (card.owner_id === currentUser.id || currentUser.role === 'admin');
+    const visClass = card.visibility === 'private' ? 'private' : 'public';
+    const visText  = card.visibility === 'private' ? 'Private' : 'Public';
+
+    return `
+    <div class="card priority-${card.priority} ${visible ? '' : 'filtered-out'}"
+         draggable="${isOwner ? 'true' : 'false'}"
+         data-card-id="${card.id}"
+         data-owner-id="${card.owner_id}"
+         data-position="${card.position_in_column}">
+        <div class="card-title">${escapeHtml(card.title)}</div>
+        <div class="card-meta">
+            <span>
+                <span class="card-priority-tag ${card.priority}">${card.priority}</span>
+                <span class="visibility-badge ${visClass}">${visText}</span>
+            </span>
+            <span>${escapeHtml(card.owner_username || '')}${card.assignee_username ? ' &rarr; ' + escapeHtml(card.assignee_username) : ''}</span>
+        </div>
+        <div class="card-actions">
+            <button class="btn btn-secondary btn-sm card-detail-btn" data-card-id="${card.id}">Details</button>
+            ${isOwner ? `
+            <button class="btn btn-primary btn-sm card-edit-btn" data-card-id="${card.id}">Edit</button>
+            <button class="btn btn-danger btn-sm card-delete-btn" data-card-id="${card.id}">Delete</button>
+            ` : ''}
+        </div>
+    </div>`;
+}
+
+// ============================================================================
+// Search & Filter
+// ============================================================================
+document.getElementById('searchInput').addEventListener('input', renderBoard);
+document.getElementById('filterPriority').addEventListener('change', renderBoard);
+document.getElementById('filterAssignee').addEventListener('change', renderBoard);
+
+// ============================================================================
+// Card Editor Modal
+// ============================================================================
+const modal          = document.getElementById('cardModal');
+const cardIdInput    = document.getElementById('cardId');
+const cardTitleInput = document.getElementById('cardTitle');
+const cardDescInput  = document.getElementById('cardDescription');
+const cardPrioInput  = document.getElementById('cardPriority');
+const cardColInput   = document.getElementById('cardColumn');
+const cardAssInput   = document.getElementById('cardAssignee');
+const cardPubInput   = document.getElementById('cardPublished');
+const visLabelEl     = document.getElementById('visibilityLabel');
+const deleteBtn      = document.getElementById('deleteCardBtn');
+const modalErrEl     = document.getElementById('modal-error');
+const noColsWarning  = document.getElementById('noColumnsWarning');
+
+function populateColumnSelect(selectedId) {
+    if (columns.length === 0) {
+        cardColInput.innerHTML = '';
+        noColsWarning.style.display = 'block';
+        document.getElementById('saveCardBtn').disabled = true;
+        return;
+    }
+    noColsWarning.style.display = 'none';
+    document.getElementById('saveCardBtn').disabled = false;
+    cardColInput.innerHTML = columns.map(c =>
+        `<option value="${c.id}" ${c.id == selectedId ? 'selected' : ''}>${escapeHtml(c.name)}</option>`
+    ).join('');
+}
+
+function openNewModal() {
+    document.getElementById('modalTitle').textContent = 'New Card';
+    cardIdInput.value = ''; cardTitleInput.value = ''; cardDescInput.value = '';
+    cardPrioInput.value = 'medium'; cardAssInput.value = '';
+    cardPubInput.checked = true; deleteBtn.style.display = 'none';
+    modalErrEl.style.display = 'none';
+    populateColumnSelect(columns[0]?.id);
+    updateVisLabel();
+    modal.showModal();
+}
+
+function openEditModal(cardId) {
+    const card = cards.find(c => String(c.id) === String(cardId));
+    if (!card) return;
+    document.getElementById('modalTitle').textContent = 'Edit Card';
+    cardIdInput.value = card.id; cardTitleInput.value = card.title;
+    cardDescInput.value = card.description || '';
+    cardPrioInput.value = card.priority;
+    cardAssInput.value = card.assignee_username || '';
+    cardPubInput.checked = card.visibility !== 'private';
+    deleteBtn.style.display = 'inline-block';
+    modalErrEl.style.display = 'none';
+    populateColumnSelect(card.column_id);
+    updateVisLabel();
+    modal.showModal();
+}
+
+function updateVisLabel() {
+    visLabelEl.textContent = cardPubInput.checked
+        ? 'Published (visible to everyone)' : 'Private (only you, assignee, and admins)';
+}
+cardPubInput.addEventListener('change', updateVisLabel);
+
+document.getElementById('addCardBtn').addEventListener('click', openNewModal);
+document.getElementById('modalClose').addEventListener('click', () => modal.close());
+document.getElementById('modalCancelBtn').addEventListener('click', () => modal.close());
+
+document.getElementById('saveCardBtn').addEventListener('click', async () => {
+    modalErrEl.style.display = 'none';
+    const id = cardIdInput.value;
+    const visibility = cardPubInput.checked ? 'public' : 'private';
+    const payload = {
+        title: cardTitleInput.value.trim(),
+        description: cardDescInput.value.trim(),
+        priority: cardPrioInput.value,
+        column_id: parseInt(cardColInput.value, 10),
+        assignee_username: cardAssInput.value.trim() || null,
+        visibility,
+    };
+    if (!payload.title) { modalErrEl.textContent = 'Title is required.'; modalErrEl.style.display = 'block'; return; }
+    if (!payload.column_id || isNaN(payload.column_id)) { modalErrEl.textContent = 'Please select a column.'; modalErrEl.style.display = 'block'; return; }
+    try {
+        if (id) { await api('PUT', `/api/cards/${id}`, payload); }
+        else { await api('POST', '/api/cards', payload); }
+        modal.close();
+        await loadBoard();
+    } catch (err) { modalErrEl.textContent = err.message; modalErrEl.style.display = 'block'; }
+});
+
+document.getElementById('deleteCardBtn').addEventListener('click', async () => {
+    const id = cardIdInput.value;
+    if (!id || !confirm('Delete this card? This cannot be undone.')) return;
+    try { await api('DELETE', `/api/cards/${id}`); modal.close(); await loadBoard(); }
+    catch (err) { modalErrEl.textContent = err.message; modalErrEl.style.display = 'block'; }
+});
+
+// ============================================================================
+// Card Detail Modal (Comments + Activity)
+// ============================================================================
+const detailModal = document.getElementById('detailModal');
+let detailCardId  = null;
+
+document.getElementById('detailClose').addEventListener('click', () => detailModal.close());
+document.getElementById('detailCloseBtn').addEventListener('click', () => detailModal.close());
+
+async function openDetailModal(cardId) {
+    detailCardId = cardId;
+    const card = cards.find(c => String(c.id) === String(cardId));
+    if (!card) return;
+
+    document.getElementById('detailTitle').textContent = card.title;
+    document.getElementById('detailInfo').innerHTML = `
+        <p style="font-size:0.85rem;color:#555;white-space:pre-wrap;">${escapeHtml(card.description || 'No description.')}</p>
+        <p style="font-size:0.8rem;margin-top:0.5rem;color:#7f8c8d;">
+            Priority: <span class="card-priority-tag ${card.priority}">${card.priority}</span> |
+            Owner: <strong>${escapeHtml(card.owner_username || 'N/A')}</strong>
+            ${card.assignee_username ? ` | Assigned to: <strong>${escapeHtml(card.assignee_username)}</strong>` : ''}
+        </p>`;
+
+    // Load comments and activity in parallel
+    const [comments, activity] = await Promise.all([
+        api('GET', `/api/cards/${cardId}/comments`).catch(() => []),
+        api('GET', `/api/cards/${cardId}/activity`).catch(() => []),
+    ]);
+
+    renderComments(comments || []);
+    renderActivity(activity || []);
+
+    detailModal.showModal();
+}
+
+function renderComments(comments) {
+    const list = document.getElementById('commentList');
+    if (comments.length === 0) {
+        list.innerHTML = '<li style="font-size:0.8rem;color:#999;">No comments yet.</li>';
+        return;
+    }
+    list.innerHTML = comments.map(c => `
+        <li class="comment-item">
+            <div class="comment-header">
+                <span>
+                    <span class="comment-author">${escapeHtml(c.username)}</span>
+                    <span class="comment-time">${formatTime(c.created_at)}</span>
+                </span>
+                ${(c.user_id === currentUser?.id || currentUser?.role === 'admin')
+                    ? `<button class="comment-delete-btn" data-comment-id="${c.id}">Delete</button>` : ''}
+            </div>
+            <div class="comment-body">${escapeHtml(c.body)}</div>
+        </li>`).join('');
+}
+
+function renderActivity(activity) {
+    const list = document.getElementById('activityTimeline');
+    if (activity.length === 0) {
+        list.innerHTML = '<li style="font-size:0.8rem;color:#999;">No activity recorded yet.</li>';
+        return;
+    }
+    list.innerHTML = activity.map(a => {
+        let desc = formatActivityAction(a);
+        return `<li>
+            <span class="activity-user">${escapeHtml(a.username || 'System')}</span>
+            ${desc}
+            <span class="activity-time">${formatTime(a.created_at)}</span>
+        </li>`;
+    }).join('');
+}
+
+function formatActivityAction(a) {
+    const d = a.details || {};
+    switch (a.action) {
+        case 'created': return `created this card in <strong>${escapeHtml(d.column || '')}</strong>`;
+        case 'moved': return `moved from <strong>${escapeHtml(d.from_column || '')}</strong> to <strong>${escapeHtml(d.to_column || '')}</strong>`;
+        case 'priority_changed': return `changed priority from <span class="card-priority-tag ${d.from}">${d.from}</span> to <span class="card-priority-tag ${d.to}">${d.to}</span>`;
+        case 'visibility_changed': return `changed visibility from <strong>${d.from}</strong> to <strong>${d.to}</strong>`;
+        case 'edited': return `edited ${escapeHtml(d.field || 'card')}`;
+        case 'assigned': return `updated assignment`;
+        case 'comment_added': return `added a comment`;
+        default: return escapeHtml(a.action);
+    }
+}
+
+function formatTime(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+// Post comment
+document.getElementById('postCommentBtn').addEventListener('click', async () => {
+    const textarea = document.getElementById('newCommentBody');
+    const body = textarea.value.trim();
+    if (!body || !detailCardId) return;
+    try {
+        await api('POST', `/api/cards/${detailCardId}/comments`, { body });
+        textarea.value = '';
+        // Refresh comments and activity
+        const [comments, activity] = await Promise.all([
+            api('GET', `/api/cards/${detailCardId}/comments`).catch(() => []),
+            api('GET', `/api/cards/${detailCardId}/activity`).catch(() => []),
+        ]);
+        renderComments(comments || []);
+        renderActivity(activity || []);
+    } catch (err) { alert('Failed to post comment: ' + err.message); }
+});
+
+// Delete comment (event delegation)
+document.getElementById('commentList').addEventListener('click', async (e) => {
+    const btn = e.target.closest('.comment-delete-btn');
+    if (!btn) return;
+    if (!confirm('Delete this comment?')) return;
+    try {
+        await api('DELETE', `/api/cards/${detailCardId}/comments/${btn.dataset.commentId}`);
+        const comments = await api('GET', `/api/cards/${detailCardId}/comments`).catch(() => []);
+        renderComments(comments || []);
+    } catch (err) { alert('Failed to delete comment: ' + err.message); }
+});
+
+// ============================================================================
+// Board click delegation (Edit, Delete, Detail buttons)
+// ============================================================================
+document.getElementById('kanban-board').addEventListener('click', async (e) => {
+    const detailBtn = e.target.closest('.card-detail-btn');
+    if (detailBtn) { e.stopPropagation(); openDetailModal(detailBtn.dataset.cardId); return; }
+
+    const editBtn = e.target.closest('.card-edit-btn');
+    if (editBtn) { e.stopPropagation(); openEditModal(editBtn.dataset.cardId); return; }
+
+    const delBtn = e.target.closest('.card-delete-btn');
+    if (delBtn) {
+        e.stopPropagation();
+        const cardId = delBtn.dataset.cardId;
+        const card = cards.find(c => String(c.id) === String(cardId));
+        if (!card || !confirm(`Delete "${card.title}"?`)) return;
+        try { await api('DELETE', `/api/cards/${cardId}`); await loadBoard(); }
+        catch (err) { alert(`Delete failed: ${err.message}`); }
+        return;
+    }
+});
+
+// ============================================================================
+// Change Password modal
+// ============================================================================
+const pwModal  = document.getElementById('passwordModal');
+const pwErrEl  = document.getElementById('pw-error');
+const pwSuccEl = document.getElementById('pw-success');
+
+document.getElementById('changePasswordBtn').addEventListener('click', () => {
+    pwErrEl.style.display = 'none'; pwSuccEl.style.display = 'none';
+    document.getElementById('passwordForm').reset();
+    pwModal.showModal();
+});
+document.getElementById('pwModalClose').addEventListener('click', () => pwModal.close());
+document.getElementById('pwCancelBtn').addEventListener('click', () => pwModal.close());
+
+document.getElementById('pwSaveBtn').addEventListener('click', async () => {
+    pwErrEl.style.display = 'none'; pwSuccEl.style.display = 'none';
+    const currentPw = document.getElementById('currentPassword').value;
+    const newPw     = document.getElementById('newPassword').value;
+    const confirmPw = document.getElementById('confirmNewPassword').value;
+    if (!currentPw || !newPw || !confirmPw) { pwErrEl.textContent = 'All fields are required.'; pwErrEl.style.display = 'block'; return; }
+    if (newPw.length < 8) { pwErrEl.textContent = 'New password must be at least 8 characters.'; pwErrEl.style.display = 'block'; return; }
+    if (newPw !== confirmPw) { pwErrEl.textContent = 'New passwords do not match.'; pwErrEl.style.display = 'block'; return; }
+    try {
+        const result = await api('POST', '/api/auth/change-password', { current_password: currentPw, new_password: newPw });
+        if (!result) return;
+        pwSuccEl.textContent = result.message || 'Password changed!';
+        pwSuccEl.style.display = 'block';
+        document.getElementById('passwordForm').reset();
+        setTimeout(() => pwModal.close(), 2000);
+    } catch (err) { pwErrEl.textContent = err.message; pwErrEl.style.display = 'block'; }
+});
+
+// ============================================================================
+// Drag-and-drop with reordering within columns
+// ============================================================================
+function attachDragListeners() {
+    const board = document.getElementById('kanban-board');
+
+    board.ondragstart = (e) => {
+        const cardEl = e.target.closest('.card[draggable="true"]');
+        if (!cardEl) return;
+        dragState.cardId = cardEl.dataset.cardId;
+        dragState.sourceColumnId = parseInt(cardEl.closest('.cards-container').dataset.columnId, 10);
+        dragState.sourcePosition = parseInt(cardEl.dataset.position, 10);
+        cardEl.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', dragState.cardId);
+    };
+
+    board.ondragend = (e) => {
+        const cardEl = e.target.closest('.card');
+        if (cardEl) cardEl.classList.remove('dragging');
+        dragState = { cardId: null, sourceColumnId: null, sourcePosition: null };
+        clearDropIndicators();
+    };
+
+    document.querySelectorAll('.cards-container').forEach(container => {
+        container.ondragover = (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            container.classList.add('drag-over');
+
+            // Determine insertion position among sibling cards
+            clearDropIndicators();
+            const afterElement = getDragAfterElement(container, e.clientY);
+            if (afterElement) {
+                afterElement.classList.add('drop-indicator-above');
+            }
+        };
+
+        container.ondragleave = (e) => {
+            if (!container.contains(e.relatedTarget)) {
+                container.classList.remove('drag-over');
+                clearDropIndicators();
+            }
+        };
+
+        container.ondrop = async (e) => {
+            e.preventDefault();
+            container.classList.remove('drag-over');
+            clearDropIndicators();
+
+            const cardId = e.dataTransfer.getData('text/plain') || dragState.cardId;
+            const targetColumnId = parseInt(container.dataset.columnId, 10);
+            if (!cardId || !targetColumnId) return;
+
+            // Calculate target position
+            const afterElement = getDragAfterElement(container, e.clientY);
+            let targetPosition;
+
+            if (afterElement) {
+                targetPosition = parseInt(afterElement.dataset.position, 10);
+                // If moving within same column and from above, adjust
+                if (targetColumnId === dragState.sourceColumnId && dragState.sourcePosition < targetPosition) {
+                    targetPosition -= 1;
+                }
+            } else {
+                // Dropped at the end of the column
+                const cardsInCol = container.querySelectorAll('.card:not(.dragging):not(.filtered-out)');
+                targetPosition = cardsInCol.length;
+                // If same column, the card is already counted
+                if (targetColumnId === dragState.sourceColumnId) {
+                    targetPosition = cardsInCol.length; // Will be placed after all others
+                }
+            }
+
+            try {
+                await api('PATCH', `/api/cards/${cardId}/reorder`, {
+                    column_id: targetColumnId,
+                    position: targetPosition,
+                });
+                await loadBoard();
+            } catch (err) {
+                alert(`Move failed: ${err.message}`);
+            }
+        };
+    });
+}
+
+function getDragAfterElement(container, y) {
+    const draggableElements = [...container.querySelectorAll('.card:not(.dragging):not(.filtered-out)')];
+
+    let closest = null;
+    let closestOffset = Number.NEGATIVE_INFINITY;
+
+    draggableElements.forEach(child => {
+        const box = child.getBoundingClientRect();
+        const offset = y - box.top - box.height / 2;
+        if (offset < 0 && offset > closestOffset) {
+            closestOffset = offset;
+            closest = child;
+        }
+    });
+
+    return closest;
+}
+
+function clearDropIndicators() {
+    document.querySelectorAll('.drop-indicator-above, .drop-indicator-below').forEach(el => {
+        el.classList.remove('drop-indicator-above', 'drop-indicator-below');
+    });
+}
+
+// ============================================================================
+// Utilities
+// ============================================================================
+function escapeHtml(text) {
+    const d = document.createElement('div');
+    d.textContent = String(text ?? '');
+    return d.innerHTML;
+}
+
+// ============================================================================
+// Bootstrap
+// ============================================================================
+(async () => {
+    try {
+        const me = await fetch('/api/auth/me', { credentials: 'include' });
+        if (me.ok) {
+            currentUser = await me.json();
+            renderUserBadge();
+            showBoard();
+            await loadBoard();
+        }
+    } catch (_) {}
+})();
+</script>
+</body>
+</html>

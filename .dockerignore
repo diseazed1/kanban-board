@@ -1,0 +1,12 @@
+node_modules
+.env
+*.env.local
+.git
+.github
+*.md
+npm-debug.log*
+app.toml
+fly_deploy.sh
+test_sendgrid.js
+seed_admin.sql
+AUDIT_FINDINGS.md
