@@ -357,4 +357,51 @@ router.get('/audit-log', async (req, res) => {
     }
 });
 
+// ---------------------------------------------------------------------------
+// DELETE /api/admin/audit-log  — clear all audit log entries
+// ---------------------------------------------------------------------------
+router.delete('/audit-log', async (req, res) => {
+    try {
+        const result = await req.db.query('DELETE FROM audit_log');
+
+        // Log the clear action itself (this entry will be the only one remaining)
+        audit(req.db, 'audit_log_cleared', req.user.id, req.ip, {
+            entries_deleted: result.rowCount,
+        });
+
+        res.json({ success: true, entries_deleted: result.rowCount });
+    } catch (err) {
+        console.error('Audit log clear error:', err);
+        res.status(500).json({ error: 'Server error clearing audit log' });
+    }
+});
+
+// ---------------------------------------------------------------------------
+// DELETE /api/admin/audit-log/older-than/:days  — purge entries older than N days
+// ---------------------------------------------------------------------------
+router.delete('/audit-log/older-than/:days', async (req, res) => {
+    const days = parseInt(req.params.days, 10);
+
+    if (isNaN(days) || days < 1) {
+        return res.status(400).json({ error: 'days must be a positive integer (minimum 1)' });
+    }
+
+    try {
+        const result = await req.db.query(
+            `DELETE FROM audit_log WHERE created_at < NOW() - INTERVAL '1 day' * $1`,
+            [days]
+        );
+
+        audit(req.db, 'audit_log_purged', req.user.id, req.ip, {
+            older_than_days: days,
+            entries_deleted: result.rowCount,
+        });
+
+        res.json({ success: true, entries_deleted: result.rowCount, older_than_days: days });
+    } catch (err) {
+        console.error('Audit log purge error:', err);
+        res.status(500).json({ error: 'Server error purging audit log' });
+    }
+});
+
 export default router;

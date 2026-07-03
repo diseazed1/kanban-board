@@ -145,9 +145,36 @@ app.use((err, _req, res, _next) => {
 });
 
 // ---------------------------------------------------------------------------
+// Automatic audit log retention — purge entries older than AUDIT_LOG_RETENTION_DAYS
+// Runs once on startup and then every 24 hours.
+// Default retention: 90 days (configurable via environment variable)
+// ---------------------------------------------------------------------------
+const AUDIT_RETENTION_DAYS = parseInt(process.env.AUDIT_LOG_RETENTION_DAYS || '90', 10);
+
+async function purgeOldAuditLogs() {
+    try {
+        const result = await db.query(
+            `DELETE FROM audit_log WHERE created_at < NOW() - INTERVAL '1 day' * $1`,
+            [AUDIT_RETENTION_DAYS]
+        );
+        if (result.rowCount > 0) {
+            console.log(`[Audit Retention] Purged ${result.rowCount} log entries older than ${AUDIT_RETENTION_DAYS} days.`);
+        }
+    } catch (err) {
+        console.error('[Audit Retention] Error purging old logs:', err.message);
+    }
+}
+
+// Run on startup (after a short delay to let the DB pool warm up)
+setTimeout(purgeOldAuditLogs, 5_000);
+// Then run every 24 hours
+setInterval(purgeOldAuditLogs, 24 * 60 * 60 * 1000);
+
+// ---------------------------------------------------------------------------
 // Start
 // ---------------------------------------------------------------------------
 const PORT = parseInt(process.env.PORT || '3000', 10);
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`Kanban Board server running on port ${PORT} [${process.env.NODE_ENV || 'development'}]`);
+    console.log(`[Audit Retention] Log entries older than ${AUDIT_RETENTION_DAYS} days will be automatically purged.`);
 });
