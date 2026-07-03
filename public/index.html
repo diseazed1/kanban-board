@@ -1,1064 +1,769 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kanban Board</title>
-    <style>
-        /* ------------------------------------------------------------------ */
-        /* Reset & base                                                         */
-        /* ------------------------------------------------------------------ */
-        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #f0f2f5; color: #2c3e50; }
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Kanban Board</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0f1117;--surface:#1a1d27;--surface2:#22263a;--border:#2e3250;
+  --accent:#5b6af0;--accent-h:#7b8aff;--text:#e2e4f0;--text-dim:#8b90b0;
+  --danger:#e05260;--success:#3ecf8e;--warn:#f5a623;--radius:10px;
+  --shadow:0 4px 20px rgba(0,0,0,.45);
+  --p-critical:#e05260;--p-high:#f5a623;--p-medium:#f5d623;--p-low:#3ecf8e;--p-minimal:#5b6af0;
+}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+a{color:var(--accent);text-decoration:none}
+button{cursor:pointer;font-family:inherit}
+input,textarea,select{font-family:inherit;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;width:100%;transition:border-color .2s}
+input:focus,textarea:focus,select:focus{outline:none;border-color:var(--accent)}
+label{display:block;font-size:.82rem;color:var(--text-dim);margin-bottom:4px}
 
-        /* ------------------------------------------------------------------ */
-        /* Login screen                                                         */
-        /* ------------------------------------------------------------------ */
-        #login-screen {
-            display: flex; justify-content: center; align-items: center;
-            min-height: 100vh; background: linear-gradient(135deg, #2c3e50, #3498db);
-        }
-        .login-box {
-            background: white; padding: 2.5rem; border-radius: 12px;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.2); width: 340px;
-        }
-        .login-box h2 { margin-bottom: 1.5rem; text-align: center; color: #2c3e50; }
-        .form-group { margin-bottom: 1rem; }
-        .form-group label { display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.3rem; }
-        .form-group input, .form-group select, .form-group textarea {
-            width: 100%; padding: 0.6rem 0.75rem; border: 1px solid #ddd;
-            border-radius: 6px; font-size: 0.95rem; transition: border-color 0.2s;
-        }
-        .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
-            outline: none; border-color: #3498db;
-        }
-        .btn {
-            display: inline-block; padding: 0.6rem 1.2rem; border: none;
-            border-radius: 6px; font-size: 0.9rem; font-weight: 600;
-            cursor: pointer; transition: opacity 0.2s, transform 0.1s;
-            text-decoration: none;
-        }
-        .btn:hover { opacity: 0.9; }
-        .btn:active { transform: scale(0.98); }
-        .btn-primary   { background: #3498db; color: white; }
-        .btn-success   { background: #27ae60; color: white; }
-        .btn-danger    { background: #e74c3c; color: white; }
-        .btn-secondary { background: #95a5a6; color: white; }
-        .btn-warning   { background: #f39c12; color: white; }
-        .btn-full      { width: 100%; }
-        .btn-sm        { padding: 0.25rem 0.5rem; font-size: 0.7rem; }
-        .login-link { text-align: center; margin-top: 1rem; font-size: 0.85rem; }
-        .login-link a { color: #3498db; text-decoration: none; }
+/* LOGIN */
+#loginScreen{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px}
+.login-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:40px 36px;width:100%;max-width:380px;box-shadow:var(--shadow)}
+.login-card h1{font-size:1.5rem;margin-bottom:6px}
+.login-card p{color:var(--text-dim);font-size:.88rem;margin-bottom:28px}
+.form-group{margin-bottom:16px}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:9px 18px;border-radius:6px;border:none;font-size:.88rem;font-weight:600;transition:opacity .15s,transform .1s}
+.btn:hover{opacity:.88}.btn:active{transform:scale(.97)}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-danger{background:var(--danger);color:#fff}
+.btn-success{background:var(--success);color:#111}
+.btn-warn{background:var(--warn);color:#111}
+.btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text)}
+.btn-sm{padding:5px 12px;font-size:.8rem}
+.btn-full{width:100%;justify-content:center}
+#loginError{color:var(--danger);font-size:.84rem;margin-top:8px;min-height:20px}
 
-        /* ------------------------------------------------------------------ */
-        /* App header                                                           */
-        /* ------------------------------------------------------------------ */
-        #app-header {
-            background: #2c3e50; color: white; padding: 0.75rem 1.5rem;
-            display: flex; justify-content: space-between; align-items: center;
-            position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-        }
-        #app-header h1 { font-size: 1.25rem; }
-        .header-actions { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
-        #user-badge {
-            font-size: 0.8rem; background: rgba(255,255,255,0.15);
-            padding: 0.3rem 0.75rem; border-radius: 20px;
-        }
-        #user-badge .role-tag {
-            font-weight: 700; text-transform: uppercase; font-size: 0.7rem;
-            margin-left: 0.4rem; padding: 0.1rem 0.4rem; border-radius: 4px;
-            background: #3498db;
-        }
-        #user-badge .role-tag.admin { background: #e74c3c; }
+/* APP */
+#app{display:none;flex-direction:column;height:100vh;overflow:hidden}
+.header{display:flex;align-items:center;justify-content:space-between;padding:0 20px;height:54px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0;gap:12px}
+.header-brand{font-weight:700;font-size:1.1rem;letter-spacing:.5px}
+.header-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.user-badge{background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:4px 12px;font-size:.82rem;color:var(--text-dim)}
+.user-badge span{color:var(--text);font-weight:600}
+.notif-btn{position:relative;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:6px 10px;font-size:1rem}
+.notif-badge{position:absolute;top:-5px;right:-5px;background:var(--danger);color:#fff;border-radius:50%;font-size:.65rem;font-weight:700;min-width:18px;height:18px;display:none;align-items:center;justify-content:center}
 
-        /* ------------------------------------------------------------------ */
-        /* Board                                                                */
-        /* ------------------------------------------------------------------ */
-        #board-container { display: none; }
-        .board-toolbar {
-            padding: 0.75rem 1.5rem; background: white;
-            border-bottom: 1px solid #e0e0e0;
-            display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;
-        }
-        .search-filter-bar {
-            display: flex; gap: 0.5rem; align-items: center; flex: 1;
-            min-width: 200px;
-        }
-        .search-filter-bar input {
-            padding: 0.4rem 0.75rem; border: 1px solid #ddd; border-radius: 6px;
-            font-size: 0.85rem; width: 180px;
-        }
-        .search-filter-bar select {
-            padding: 0.4rem 0.5rem; border: 1px solid #ddd; border-radius: 6px;
-            font-size: 0.85rem;
-        }
-        .priority-legend {
-            display: flex; gap: 0.5rem; align-items: center;
-            font-size: 0.72rem; color: #7f8c8d;
-        }
-        .priority-legend .legend-item { display: flex; align-items: center; gap: 0.2rem; }
-        .priority-legend .legend-swatch { width: 12px; height: 12px; border-radius: 3px; }
-        .board {
-            display: flex; overflow-x: auto; padding: 1.25rem;
-            gap: 1rem; min-height: calc(100vh - 145px);
-        }
-        .column {
-            min-width: 280px; max-width: 280px; background: #e8eaec;
-            border-radius: 10px; padding: 0.75rem; flex-shrink: 0;
-            display: flex; flex-direction: column; transition: background 0.2s;
-        }
-        .column-header {
-            display: flex; justify-content: space-between; align-items: center;
-            margin-bottom: 0.75rem; padding-bottom: 0.5rem;
-            border-bottom: 2px solid #d0d3d7;
-        }
-        .column-title { font-weight: 700; color: #2c3e50; }
-        .wip-counter  { font-size: 0.75rem; color: #7f8c8d; }
-        .wip-exceeded { color: #e74c3c; font-weight: 700; }
-        .cards-container {
-            flex: 1; min-height: 60px; padding: 4px; border-radius: 6px;
-            transition: background 0.2s, border 0.2s;
-            border: 2px solid transparent;
-        }
-        .cards-container.drag-over {
-            background: rgba(52, 152, 219, 0.1);
-            border: 2px dashed #3498db;
-        }
+/* TOOLBAR */
+.toolbar{display:flex;align-items:center;gap:10px;padding:10px 20px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0;flex-wrap:wrap}
+.toolbar input[type="search"]{max-width:220px}
+.toolbar select{max-width:160px}
+.saved-views-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.view-chip{background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:3px 12px;font-size:.78rem;color:var(--text-dim);cursor:pointer;transition:background .15s}
+.view-chip:hover,.view-chip.active{background:var(--accent);color:#fff;border-color:var(--accent)}
 
-        /* ------------------------------------------------------------------ */
-        /* Cards — 5-level priority color system                                */
-        /* ------------------------------------------------------------------ */
-        .card {
-            background: white; border-radius: 8px; padding: 0.75rem;
-            margin-bottom: 0.5rem; cursor: grab;
-            box-shadow: 0 1px 4px rgba(0,0,0,0.1);
-            transition: transform 0.15s, box-shadow 0.15s, opacity 0.15s;
-            border-left: 5px solid #bdc3c7;
-            position: relative; user-select: none;
-        }
-        .card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
-        .card.dragging { opacity: 0.4; transform: rotate(2deg) scale(1.02); cursor: grabbing; }
-        .card.drop-indicator-above { border-top: 3px solid #3498db; }
-        .card.drop-indicator-below { border-bottom: 3px solid #3498db; }
-        .card.filtered-out { display: none; }
+/* LEGEND */
+.legend{display:flex;align-items:center;gap:14px;padding:6px 20px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0;flex-wrap:wrap}
+.legend-item{display:flex;align-items:center;gap:5px;font-size:.75rem;color:var(--text-dim)}
+.legend-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
 
-        .card.priority-critical { border-left-color: #e74c3c; background: #fdf2f2; }
-        .card.priority-high     { border-left-color: #e67e22; background: #fef9f3; }
-        .card.priority-medium   { border-left-color: #f1c40f; background: #fefef3; }
-        .card.priority-low      { border-left-color: #27ae60; background: #f3fef6; }
-        .card.priority-minimal  { border-left-color: #3498db; background: #f3f9fe; }
+/* BOARD */
+.board-wrap{flex:1;overflow-x:auto;overflow-y:hidden;padding:16px 20px}
+.board{display:flex;gap:16px;height:100%;align-items:flex-start}
+.column{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);width:280px;min-width:280px;display:flex;flex-direction:column;max-height:calc(100vh - 200px)}
+.column-header{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--border);flex-shrink:0}
+.column-title{font-weight:600;font-size:.92rem}
+.column-count{background:var(--surface2);border-radius:12px;padding:2px 8px;font-size:.75rem;color:var(--text-dim)}
+.column-body{flex:1;overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:8px}
+.column-body.drag-over{background:rgba(91,106,240,.08);border-radius:6px}
+.column-add{padding:8px 10px;border-top:1px solid var(--border);flex-shrink:0}
+.column-add button{width:100%;background:transparent;border:1px dashed var(--border);color:var(--text-dim);border-radius:6px;padding:7px;font-size:.82rem;transition:all .15s}
+.column-add button:hover{border-color:var(--accent);color:var(--accent);background:rgba(91,106,240,.06)}
 
-        .card-title { font-weight: 600; font-size: 0.9rem; margin-bottom: 0.4rem; word-break: break-word; }
-        .card-meta {
-            font-size: 0.75rem; color: #95a5a6;
-            display: flex; justify-content: space-between; align-items: center;
-            flex-wrap: wrap; gap: 0.2rem;
-        }
-        .card-priority-tag {
-            display: inline-block; font-size: 0.65rem; font-weight: 700;
-            text-transform: uppercase; padding: 0.1rem 0.4rem;
-            border-radius: 3px; letter-spacing: 0.3px;
-        }
-        .card-priority-tag.critical { background: #e74c3c; color: white; }
-        .card-priority-tag.high     { background: #e67e22; color: white; }
-        .card-priority-tag.medium   { background: #f1c40f; color: #2c3e50; }
-        .card-priority-tag.low      { background: #27ae60; color: white; }
-        .card-priority-tag.minimal  { background: #3498db; color: white; }
+/* CARD */
+.card{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;cursor:grab;user-select:none;transition:box-shadow .15s,transform .1s;position:relative}
+.card:hover{box-shadow:0 4px 16px rgba(0,0,0,.4)}
+.card.dragging{opacity:.4;transform:scale(.97)}
+.card-priority-bar{position:absolute;left:0;top:0;bottom:0;width:4px;border-radius:8px 0 0 8px}
+.card-inner{padding-left:8px}
+.card-title{font-weight:600;font-size:.88rem;margin-bottom:6px;line-height:1.4}
+.card-meta{display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin-bottom:8px}
+.badge{display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:10px;font-size:.72rem;font-weight:600}
+.badge-private{background:rgba(224,82,96,.15);color:var(--danger)}
+.badge-public{background:rgba(62,207,142,.12);color:var(--success)}
+.badge-overdue{background:rgba(224,82,96,.2);color:var(--danger)}
+.badge-due-soon{background:rgba(245,166,35,.2);color:var(--warn)}
+.badge-assignee{background:var(--surface);color:var(--text-dim);border:1px solid var(--border)}
+.card-progress{margin-bottom:8px}
+.progress-bar-wrap{background:var(--surface);border-radius:4px;height:4px;overflow:hidden}
+.progress-bar-fill{height:100%;background:var(--success);border-radius:4px;transition:width .3s}
+.progress-label{font-size:.72rem;color:var(--text-dim);margin-bottom:3px}
+.card-footer{display:flex;align-items:center;justify-content:space-between;gap:6px}
+.card-actions{display:flex;gap:5px}
+.card-icon-btn{background:transparent;border:1px solid var(--border);color:var(--text-dim);border-radius:5px;padding:3px 7px;font-size:.75rem;transition:all .15s}
+.card-icon-btn:hover{border-color:var(--accent);color:var(--accent)}
+.card-icon-btn.danger:hover{border-color:var(--danger);color:var(--danger)}
+.add-column-btn{background:var(--surface);border:2px dashed var(--border);border-radius:var(--radius);width:200px;min-width:200px;height:60px;color:var(--text-dim);font-size:.88rem;transition:all .15s;flex-shrink:0}
+.add-column-btn:hover{border-color:var(--accent);color:var(--accent)}
 
-        .card-actions { display: flex; gap: 0.3rem; margin-top: 0.5rem; justify-content: flex-end; }
+/* MODALS */
+dialog{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);padding:0;max-width:560px;width:95vw;box-shadow:var(--shadow)}
+dialog::backdrop{background:rgba(0,0,0,.65)}
+.modal-header{display:flex;align-items:center;justify-content:space-between;padding:18px 22px 14px;border-bottom:1px solid var(--border)}
+.modal-header h2{font-size:1.05rem}
+.modal-close{background:none;border:none;color:var(--text-dim);font-size:1.3rem;line-height:1;padding:2px 6px;border-radius:4px}
+.modal-close:hover{color:var(--text);background:var(--surface2)}
+.modal-body{padding:20px 22px;display:flex;flex-direction:column;gap:14px}
+.modal-footer{padding:14px 22px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 
-        .visibility-badge {
-            display: inline-flex; align-items: center; gap: 0.2rem;
-            font-size: 0.65rem; font-weight: 600; padding: 0.1rem 0.35rem;
-            border-radius: 3px; text-transform: uppercase;
-        }
-        .visibility-badge.public  { background: #d5f5e3; color: #1e8449; }
-        .visibility-badge.private { background: #fde8e8; color: #c0392b; }
+/* DETAIL PANEL */
+#detailPanel{position:fixed;top:0;right:-600px;width:580px;max-width:100vw;height:100vh;background:var(--surface);border-left:1px solid var(--border);box-shadow:-8px 0 40px rgba(0,0,0,.5);z-index:200;display:flex;flex-direction:column;transition:right .3s ease}
+#detailPanel.open{right:0}
+.detail-header{display:flex;align-items:flex-start;justify-content:space-between;padding:18px 20px 14px;border-bottom:1px solid var(--border);gap:12px;flex-shrink:0}
+.detail-title{font-size:1.1rem;font-weight:700;flex:1}
+.detail-body{flex:1;overflow-y:auto;padding:0}
+.detail-section{padding:16px 20px;border-bottom:1px solid var(--border)}
+.detail-section h3{font-size:.82rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px}
+.detail-meta-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.detail-meta-item label{font-size:.78rem;color:var(--text-dim);margin-bottom:2px}
+.detail-meta-item p{font-size:.88rem;font-weight:500}
+.detail-desc{font-size:.88rem;color:var(--text-dim);line-height:1.6;white-space:pre-wrap}
+.subtask-list{display:flex;flex-direction:column;gap:6px}
+.subtask-item{display:flex;align-items:center;gap:8px}
+.subtask-item input[type="checkbox"]{width:auto;cursor:pointer;accent-color:var(--accent)}
+.subtask-item span{font-size:.88rem;flex:1}
+.subtask-item span.done{text-decoration:line-through;color:var(--text-dim)}
+.subtask-item button{background:none;border:none;color:var(--text-dim);font-size:.9rem;padding:2px 5px}
+.subtask-item button:hover{color:var(--danger)}
+.subtask-add{display:flex;gap:8px;margin-top:8px}
+.subtask-add input{flex:1}
+.attachment-list{display:flex;flex-direction:column;gap:6px}
+.attachment-item{display:flex;align-items:center;gap:8px;background:var(--surface2);border-radius:6px;padding:8px 10px}
+.attachment-icon{font-size:1.1rem}
+.attachment-info{flex:1;min-width:0}
+.attachment-name{font-size:.85rem;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.attachment-meta{font-size:.72rem;color:var(--text-dim)}
+.attachment-actions{display:flex;gap:4px}
+.file-upload-area{border:2px dashed var(--border);border-radius:8px;padding:16px;text-align:center;cursor:pointer;transition:all .15s}
+.file-upload-area:hover{border-color:var(--accent);background:rgba(91,106,240,.05)}
+.file-upload-area p{font-size:.82rem;color:var(--text-dim)}
+#fileInput{display:none}
+.comment-list{display:flex;flex-direction:column;gap:10px}
+.comment-item{background:var(--surface2);border-radius:8px;padding:10px 12px}
+.comment-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:5px}
+.comment-author{font-size:.8rem;font-weight:600;color:var(--accent)}
+.comment-time{font-size:.72rem;color:var(--text-dim)}
+.comment-body{font-size:.85rem;line-height:1.5;white-space:pre-wrap}
+.comment-body .mention{color:var(--accent);font-weight:600}
+.comment-form{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+.comment-form textarea{resize:vertical;min-height:70px}
+.mention-hint{font-size:.75rem;color:var(--text-dim)}
+.activity-list{display:flex;flex-direction:column;gap:8px}
+.activity-item{display:flex;gap:10px;align-items:flex-start}
+.activity-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);flex-shrink:0;margin-top:5px}
+.activity-content{flex:1}
+.activity-text{font-size:.83rem}
+.activity-time{font-size:.72rem;color:var(--text-dim);margin-top:1px}
 
-        .comment-count-badge {
-            font-size: 0.7rem; color: #7f8c8d;
-        }
+/* NOTIFICATIONS PANEL */
+#notifPanel{position:fixed;top:54px;right:16px;width:340px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);z-index:300;display:none;max-height:500px;flex-direction:column}
+#notifPanel.open{display:flex}
+.notif-panel-header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border);flex-shrink:0}
+.notif-panel-header h3{font-size:.9rem;font-weight:600}
+.notif-list{flex:1;overflow-y:auto}
+.notif-item{display:flex;gap:10px;padding:12px 16px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s}
+.notif-item:hover{background:var(--surface2)}
+.notif-item.unread{background:rgba(91,106,240,.06)}
+.notif-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);flex-shrink:0;margin-top:4px}
+.notif-dot.read{background:transparent;border:1px solid var(--border)}
+.notif-text{font-size:.82rem;line-height:1.4}
+.notif-time{font-size:.72rem;color:var(--text-dim);margin-top:2px}
+.notif-empty{padding:24px;text-align:center;color:var(--text-dim);font-size:.85rem}
 
-        /* ------------------------------------------------------------------ */
-        /* Dialog / Modal                                                       */
-        /* ------------------------------------------------------------------ */
-        dialog {
-            border: none; border-radius: 12px; padding: 0;
-            box-shadow: 0 8px 40px rgba(0,0,0,0.25);
-            max-width: 95vw;
-        }
-        dialog::backdrop { background: rgba(0,0,0,0.4); }
-        .modal-header {
-            padding: 1.25rem 1.5rem; border-bottom: 1px solid #eee;
-            display: flex; justify-content: space-between; align-items: center;
-        }
-        .modal-header h2 { font-size: 1.1rem; }
-        .modal-close { background: none; border: none; font-size: 1.4rem; cursor: pointer; color: #7f8c8d; }
-        .modal-body { padding: 1.5rem; max-height: 70vh; overflow-y: auto; }
-        .modal-footer { padding: 1rem 1.5rem; border-top: 1px solid #eee; display: flex; gap: 0.75rem; justify-content: flex-end; }
+/* TOAST */
+.toast{position:fixed;bottom:24px;right:24px;z-index:9999;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px 18px;font-size:.88rem;box-shadow:var(--shadow);transform:translateY(80px);opacity:0;transition:all .3s;max-width:320px}
+.toast.show{transform:translateY(0);opacity:1}
+.toast.success{border-left:4px solid var(--success)}
+.toast.error{border-left:4px solid var(--danger)}
 
-        #cardModal { width: 460px; }
-        #detailModal { width: 600px; }
-        #passwordModal { width: 420px; }
-
-        .visibility-toggle {
-            display: flex; align-items: center; gap: 0.75rem;
-            padding: 0.75rem; background: #f8f9fa; border-radius: 8px; margin-top: 0.5rem;
-        }
-        .toggle-switch { position: relative; display: inline-block; width: 46px; height: 24px; }
-        .toggle-switch input { opacity: 0; width: 0; height: 0; }
-        .toggle-slider {
-            position: absolute; cursor: pointer; inset: 0;
-            background: #ccc; border-radius: 24px; transition: 0.3s;
-        }
-        .toggle-slider::before {
-            content: ''; position: absolute; height: 18px; width: 18px;
-            left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: 0.3s;
-        }
-        input:checked + .toggle-slider { background: #27ae60; }
-        input:checked + .toggle-slider::before { transform: translateX(22px); }
-        .toggle-label { font-size: 0.85rem; font-weight: 600; }
-
-        /* ------------------------------------------------------------------ */
-        /* Card Detail Panel                                                    */
-        /* ------------------------------------------------------------------ */
-        .detail-section { margin-bottom: 1.5rem; }
-        .detail-section h3 {
-            font-size: 0.9rem; color: #2c3e50; margin-bottom: 0.5rem;
-            border-bottom: 1px solid #eee; padding-bottom: 0.3rem;
-        }
-        .activity-timeline { list-style: none; padding: 0; }
-        .activity-timeline li {
-            padding: 0.4rem 0; border-bottom: 1px solid #f5f5f5;
-            font-size: 0.8rem; color: #555;
-        }
-        .activity-timeline .activity-time {
-            font-size: 0.7rem; color: #999; margin-left: 0.5rem;
-        }
-        .activity-timeline .activity-user { font-weight: 600; color: #2c3e50; }
-        .comment-list { list-style: none; padding: 0; }
-        .comment-item {
-            padding: 0.6rem; background: #f8f9fa; border-radius: 6px;
-            margin-bottom: 0.5rem; position: relative;
-        }
-        .comment-item .comment-header {
-            display: flex; justify-content: space-between; align-items: center;
-            margin-bottom: 0.3rem;
-        }
-        .comment-item .comment-author { font-weight: 600; font-size: 0.8rem; color: #2c3e50; }
-        .comment-item .comment-time { font-size: 0.7rem; color: #999; }
-        .comment-item .comment-body { font-size: 0.85rem; color: #333; white-space: pre-wrap; }
-        .comment-item .comment-delete-btn {
-            background: none; border: none; color: #e74c3c; cursor: pointer;
-            font-size: 0.75rem; font-weight: 600;
-        }
-        .comment-form { display: flex; gap: 0.5rem; margin-top: 0.5rem; }
-        .comment-form textarea {
-            flex: 1; padding: 0.5rem; border: 1px solid #ddd; border-radius: 6px;
-            font-size: 0.85rem; resize: vertical; min-height: 50px;
-        }
-
-        /* ------------------------------------------------------------------ */
-        /* Alerts                                                               */
-        /* ------------------------------------------------------------------ */
-        .alert { padding: 0.75rem 1rem; border-radius: 6px; margin-bottom: 1rem; font-size: 0.875rem; }
-        .alert-error   { background: #fde8e8; color: #c0392b; border: 1px solid #f5c6cb; }
-        .alert-success { background: #d5f5e3; color: #1e8449; border: 1px solid #c3e6cb; }
-
-        .empty-board-msg { text-align: center; padding: 4rem 2rem; color: #7f8c8d; }
-        .empty-board-msg h3 { margin-bottom: 0.5rem; color: #2c3e50; }
-
-        @media (max-width: 600px) {
-            .header-actions { gap: 0.4rem; }
-            .btn { padding: 0.4rem 0.8rem; font-size: 0.8rem; }
-            .board { padding: 0.75rem; gap: 0.75rem; }
-            .column { min-width: 260px; max-width: 260px; }
-            .search-filter-bar input { width: 120px; }
-        }
-    </style>
+/* TABS */
+.tab-bar{display:flex;border-bottom:1px solid var(--border);flex-shrink:0}
+.tab-btn{flex:1;background:none;border:none;color:var(--text-dim);padding:10px;font-size:.82rem;font-weight:600;border-bottom:2px solid transparent;transition:all .15s}
+.tab-btn.active{color:var(--accent);border-bottom-color:var(--accent)}
+.tab-content{display:none}
+.tab-content.active{display:block}
+</style>
 </head>
 <body>
 
-<!-- LOGIN SCREEN -->
-<div id="login-screen">
-    <div class="login-box">
-        <h2>Kanban Board</h2>
-        <div id="login-error" class="alert alert-error" style="display:none;"></div>
-        <form id="loginForm">
-            <div class="form-group">
-                <label for="login-username">Username</label>
-                <input type="text" id="login-username" name="username" autocomplete="username" required>
-            </div>
-            <div class="form-group">
-                <label for="login-password">Password</label>
-                <input type="password" id="login-password" name="password" autocomplete="current-password" required>
-            </div>
-            <button type="submit" class="btn btn-primary btn-full">Sign In</button>
-        </form>
-        <div class="login-link">
-            Have an invite? <a href="/register.html">Create your account</a>
-        </div>
-    </div>
+<div id="loginScreen">
+  <div class="login-card">
+    <h1>Kanban Board</h1>
+    <p>Sign in to continue</p>
+    <div class="form-group"><label for="loginUser">Username</label><input id="loginUser" type="text" autocomplete="username" placeholder="Enter username" /></div>
+    <div class="form-group"><label for="loginPass">Password</label><input id="loginPass" type="password" autocomplete="current-password" placeholder="Enter password" /></div>
+    <button id="loginBtn" class="btn btn-primary btn-full">Sign In</button>
+    <div id="loginError"></div>
+  </div>
 </div>
 
-<!-- MAIN APP -->
-<div id="board-container">
-    <header id="app-header">
-        <h1>Kanban Board</h1>
-        <div class="header-actions">
-            <span id="user-badge"></span>
-            <button id="changePasswordBtn" class="btn btn-warning">Change Password</button>
-            <a id="adminLink" href="/admin.html" class="btn btn-danger" style="display:none;">Admin</a>
-            <button id="logoutBtn" class="btn btn-secondary">Logout</button>
-        </div>
-    </header>
-
-    <div class="board-toolbar">
-        <button id="addCardBtn" class="btn btn-primary">+ Add Card</button>
-        <div class="search-filter-bar">
-            <input type="text" id="searchInput" placeholder="Search cards...">
-            <select id="filterPriority">
-                <option value="">All Priorities</option>
-                <option value="critical">Critical</option>
-                <option value="high">High</option>
-                <option value="medium">Medium</option>
-                <option value="low">Low</option>
-                <option value="minimal">Minimal</option>
-            </select>
-            <select id="filterAssignee">
-                <option value="">All Assignees</option>
-            </select>
-        </div>
-        <div class="priority-legend">
-            <span class="legend-item"><span class="legend-swatch" style="background:#e74c3c;"></span>Critical</span>
-            <span class="legend-item"><span class="legend-swatch" style="background:#e67e22;"></span>High</span>
-            <span class="legend-item"><span class="legend-swatch" style="background:#f1c40f;"></span>Medium</span>
-            <span class="legend-item"><span class="legend-swatch" style="background:#27ae60;"></span>Low</span>
-            <span class="legend-item"><span class="legend-swatch" style="background:#3498db;"></span>Minimal</span>
-        </div>
+<div id="app">
+  <header class="header">
+    <div class="header-brand">Kanban Board</div>
+    <div class="header-actions">
+      <div class="user-badge">Signed in as <span id="headerUser"></span></div>
+      <button class="notif-btn btn" id="notifBtn" title="Notifications">🔔<span class="notif-badge" id="notifBadge">0</span></button>
+      <button class="btn btn-ghost btn-sm" id="changePwBtn">Change Password</button>
+      <a id="adminLink" href="/admin.html" class="btn btn-warn btn-sm" style="display:none">Admin</a>
+      <button id="logoutBtn" class="btn btn-danger btn-sm">Sign Out</button>
     </div>
-
-    <div class="board" id="kanban-board"></div>
+  </header>
+  <div class="toolbar">
+    <input type="search" id="searchInput" placeholder="Search cards…" />
+    <select id="filterPriority"><option value="">All Priorities</option><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option><option value="minimal">Minimal</option></select>
+    <select id="filterAssignee"><option value="">All Assignees</option></select>
+    <select id="filterDue"><option value="">All Due Dates</option><option value="overdue">Overdue</option><option value="due_soon">Due Soon (24h)</option><option value="upcoming">Upcoming</option></select>
+    <button class="btn btn-ghost btn-sm" id="saveViewBtn">💾 Save View</button>
+    <button class="btn btn-ghost btn-sm" id="clearFiltersBtn">Clear</button>
+    <div class="saved-views-row" id="savedViewsRow"></div>
+  </div>
+  <div class="legend">
+    <span style="font-size:.75rem;color:var(--text-dim);font-weight:600">Priority:</span>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--p-critical)"></div>Critical</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--p-high)"></div>High</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--p-medium)"></div>Medium</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--p-low)"></div>Low</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--p-minimal)"></div>Minimal</div>
+  </div>
+  <div class="board-wrap"><div class="board" id="board"><button class="add-column-btn" id="addColumnBtn">+ Add Column</button></div></div>
 </div>
 
-<!-- CARD EDITOR MODAL -->
+<!-- Notifications Panel -->
+<div id="notifPanel">
+  <div class="notif-panel-header"><h3>Notifications</h3><button class="btn btn-ghost btn-sm" id="markAllReadBtn">Mark all read</button></div>
+  <div class="notif-list" id="notifList"><div class="notif-empty">No notifications</div></div>
+</div>
+
+<!-- Card Detail Panel -->
+<div id="detailPanel">
+  <div class="detail-header">
+    <div><div class="detail-title" id="detailTitle"></div><div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap" id="detailBadges"></div></div>
+    <div style="display:flex;gap:6px;flex-shrink:0"><button class="btn btn-ghost btn-sm" id="detailEditBtn">Edit</button><button class="modal-close" id="detailCloseBtn">✕</button></div>
+  </div>
+  <div class="tab-bar">
+    <button class="tab-btn active" data-tab="overview">Overview</button>
+    <button class="tab-btn" data-tab="subtasks">Subtasks</button>
+    <button class="tab-btn" data-tab="attachments">Files</button>
+    <button class="tab-btn" data-tab="comments">Comments</button>
+    <button class="tab-btn" data-tab="activity">Activity</button>
+  </div>
+  <div class="detail-body">
+    <div class="tab-content active" id="tab-overview">
+      <div class="detail-section"><h3>Details</h3>
+        <div class="detail-meta-grid">
+          <div class="detail-meta-item"><label>Priority</label><p id="detailPriority"></p></div>
+          <div class="detail-meta-item"><label>Status</label><p id="detailVisibility"></p></div>
+          <div class="detail-meta-item"><label>Assigned To</label><p id="detailAssignee"></p></div>
+          <div class="detail-meta-item"><label>Due Date</label><p id="detailDueDate"></p></div>
+          <div class="detail-meta-item"><label>Created By</label><p id="detailOwner"></p></div>
+          <div class="detail-meta-item"><label>Created</label><p id="detailCreated"></p></div>
+        </div>
+      </div>
+      <div class="detail-section"><h3>Description</h3><p class="detail-desc" id="detailDesc"></p></div>
+    </div>
+    <div class="tab-content" id="tab-subtasks">
+      <div class="detail-section"><h3>Checklist</h3>
+        <div class="subtask-list" id="subtaskList"></div>
+        <div class="subtask-add"><input type="text" id="subtaskInput" placeholder="Add a subtask…" /><button class="btn btn-primary btn-sm" id="addSubtaskBtn">Add</button></div>
+      </div>
+    </div>
+    <div class="tab-content" id="tab-attachments">
+      <div class="detail-section"><h3>Files</h3>
+        <div class="attachment-list" id="attachmentList"></div>
+        <div class="file-upload-area" id="uploadArea" style="margin-top:12px">
+          <p>📎 Click to attach a file (max 10 MB)</p>
+          <p style="font-size:.72rem;margin-top:4px">Images, PDFs, Word, Excel, ZIP</p>
+          <input type="file" id="fileInput" />
+        </div>
+      </div>
+    </div>
+    <div class="tab-content" id="tab-comments">
+      <div class="detail-section"><h3>Comments</h3>
+        <div class="comment-list" id="commentList"></div>
+        <div class="comment-form">
+          <textarea id="commentInput" placeholder="Write a comment… Use @username to mention someone"></textarea>
+          <p class="mention-hint">Tip: Use @username to notify a team member</p>
+          <button class="btn btn-primary btn-sm" id="postCommentBtn">Post Comment</button>
+        </div>
+      </div>
+    </div>
+    <div class="tab-content" id="tab-activity">
+      <div class="detail-section"><h3>Timeline</h3><div class="activity-list" id="activityList"></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- Card Modal -->
 <dialog id="cardModal">
-    <div class="modal-header">
-        <h2 id="modalTitle">New Card</h2>
-        <button class="modal-close" id="modalClose">&times;</button>
+  <div class="modal-header"><h2 id="cardModalTitle">New Card</h2><button class="modal-close" id="cardModalClose">✕</button></div>
+  <div class="modal-body">
+    <div class="form-group"><label for="cardTitle">Title *</label><input id="cardTitle" type="text" placeholder="Card title" maxlength="200" /></div>
+    <div class="form-group"><label for="cardDesc">Description</label><textarea id="cardDesc" rows="3" placeholder="Optional description"></textarea></div>
+    <div class="form-row">
+      <div class="form-group"><label for="cardPriority">Priority</label><select id="cardPriority"><option value="critical">🔴 Critical</option><option value="high">🟠 High</option><option value="medium" selected>🟡 Medium</option><option value="low">🟢 Low</option><option value="minimal">🔵 Minimal</option></select></div>
+      <div class="form-group"><label for="cardColumn">Column *</label><select id="cardColumn"></select></div>
     </div>
-    <div class="modal-body">
-        <div id="modal-error" class="alert alert-error" style="display:none;"></div>
-        <form id="cardForm">
-            <input type="hidden" id="cardId">
-            <div class="form-group">
-                <label for="cardTitle">Title *</label>
-                <input type="text" id="cardTitle" name="title" required maxlength="200">
-            </div>
-            <div class="form-group">
-                <label for="cardDescription">Description</label>
-                <textarea id="cardDescription" name="description" rows="3"></textarea>
-            </div>
-            <div class="form-group">
-                <label for="cardPriority">Priority</label>
-                <select id="cardPriority" name="priority">
-                    <option value="critical">Critical (Red)</option>
-                    <option value="high">High (Orange)</option>
-                    <option value="medium" selected>Medium (Yellow)</option>
-                    <option value="low">Low (Green)</option>
-                    <option value="minimal">Minimal (Blue)</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label for="cardColumn">Column *</label>
-                <select id="cardColumn" name="column_id" required></select>
-                <div id="noColumnsWarning" class="alert alert-error" style="display:none;margin-top:0.5rem;">
-                    No columns exist yet. An admin must create columns first.
-                </div>
-            </div>
-            <div class="form-group">
-                <label for="cardAssignee">Assignee (username)</label>
-                <input type="text" id="cardAssignee" name="assignee" placeholder="Leave blank for unassigned">
-            </div>
-            <div class="visibility-toggle">
-                <label class="toggle-switch">
-                    <input type="checkbox" id="cardPublished" name="published" checked>
-                    <span class="toggle-slider"></span>
-                </label>
-                <div>
-                    <div class="toggle-label" id="visibilityLabel">Published (visible to everyone)</div>
-                    <div style="font-size:0.75rem;color:#7f8c8d;">
-                        When private, only you, your assignee, and admins can see this card.
-                    </div>
-                </div>
-            </div>
-        </form>
+    <div class="form-row">
+      <div class="form-group"><label for="cardAssignee">Assign To</label><select id="cardAssignee"><option value="">— Unassigned —</option></select></div>
+      <div class="form-group"><label for="cardDueDate">Due Date</label><input id="cardDueDate" type="datetime-local" /></div>
     </div>
-    <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" id="modalCancelBtn">Cancel</button>
-        <button type="button" class="btn btn-danger" id="deleteCardBtn" style="display:none;">Delete</button>
-        <button type="button" class="btn btn-primary" id="saveCardBtn">Save Card</button>
-    </div>
+    <div class="form-group"><label for="cardVisibility">Visibility</label><select id="cardVisibility"><option value="public">Public — visible to all team members</option><option value="private">Private — visible only to you, assignee, and admins</option></select></div>
+    <div id="cardModalError" style="color:var(--danger);font-size:.84rem;min-height:18px"></div>
+  </div>
+  <div class="modal-footer"><button class="btn btn-ghost" id="cardModalCancel">Cancel</button><button class="btn btn-primary" id="cardModalSave">Save Card</button></div>
 </dialog>
 
-<!-- CARD DETAIL MODAL (Activity + Comments) -->
-<dialog id="detailModal">
-    <div class="modal-header">
-        <h2 id="detailTitle">Card Details</h2>
-        <button class="modal-close" id="detailClose">&times;</button>
-    </div>
-    <div class="modal-body">
-        <div id="detailInfo" style="margin-bottom:1rem;"></div>
-
-        <div class="detail-section">
-            <h3>Comments</h3>
-            <ul class="comment-list" id="commentList"></ul>
-            <div class="comment-form">
-                <textarea id="newCommentBody" placeholder="Add a comment..."></textarea>
-                <button class="btn btn-primary btn-sm" id="postCommentBtn" style="align-self:flex-end;padding:0.4rem 0.8rem;">Post</button>
-            </div>
-        </div>
-
-        <div class="detail-section">
-            <h3>Activity Timeline</h3>
-            <ul class="activity-timeline" id="activityTimeline"></ul>
-        </div>
-    </div>
-    <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" id="detailCloseBtn">Close</button>
-    </div>
+<!-- Column Modal -->
+<dialog id="columnModal">
+  <div class="modal-header"><h2 id="columnModalTitle">New Column</h2><button class="modal-close" id="columnModalClose">✕</button></div>
+  <div class="modal-body">
+    <div class="form-group"><label for="columnName">Column Name *</label><input id="columnName" type="text" placeholder="e.g. In Progress" maxlength="50" /></div>
+    <div class="form-group"><label for="columnWip">WIP Limit (optional)</label><input id="columnWip" type="number" min="1" max="99" placeholder="Leave blank for unlimited" /></div>
+    <div id="columnModalError" style="color:var(--danger);font-size:.84rem;min-height:18px"></div>
+  </div>
+  <div class="modal-footer"><button class="btn btn-ghost" id="columnModalCancel">Cancel</button><button class="btn btn-primary" id="columnModalSave">Save Column</button></div>
 </dialog>
 
-<!-- CHANGE PASSWORD MODAL -->
+<!-- Change Password Modal -->
 <dialog id="passwordModal">
-    <div class="modal-header">
-        <h2>Change Password</h2>
-        <button class="modal-close" id="pwModalClose">&times;</button>
-    </div>
-    <div class="modal-body">
-        <div id="pw-error" class="alert alert-error" style="display:none;"></div>
-        <div id="pw-success" class="alert alert-success" style="display:none;"></div>
-        <form id="passwordForm">
-            <div class="form-group">
-                <label for="currentPassword">Current Password</label>
-                <input type="password" id="currentPassword" autocomplete="current-password" required>
-            </div>
-            <div class="form-group">
-                <label for="newPassword">New Password</label>
-                <input type="password" id="newPassword" minlength="8" autocomplete="new-password" required>
-                <div style="font-size:0.75rem;color:#7f8c8d;margin-top:0.25rem;">At least 8 characters.</div>
-            </div>
-            <div class="form-group">
-                <label for="confirmNewPassword">Confirm New Password</label>
-                <input type="password" id="confirmNewPassword" autocomplete="new-password" required>
-            </div>
-        </form>
-    </div>
-    <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" id="pwCancelBtn">Cancel</button>
-        <button type="button" class="btn btn-primary" id="pwSaveBtn">Update Password</button>
-    </div>
+  <div class="modal-header"><h2>Change Password</h2><button class="modal-close" id="passwordModalClose">✕</button></div>
+  <div class="modal-body">
+    <div class="form-group"><label for="currentPw">Current Password</label><input id="currentPw" type="password" autocomplete="current-password" /></div>
+    <div class="form-group"><label for="newPw">New Password</label><input id="newPw" type="password" autocomplete="new-password" /></div>
+    <div class="form-group"><label for="confirmPw">Confirm New Password</label><input id="confirmPw" type="password" autocomplete="new-password" /></div>
+    <div id="passwordModalError" style="color:var(--danger);font-size:.84rem;min-height:18px"></div>
+  </div>
+  <div class="modal-footer"><button class="btn btn-ghost" id="passwordModalCancel">Cancel</button><button class="btn btn-primary" id="passwordModalSave">Update Password</button></div>
 </dialog>
+
+<!-- Save View Modal -->
+<dialog id="saveViewModal">
+  <div class="modal-header"><h2>Save Filter View</h2><button class="modal-close" id="saveViewModalClose">✕</button></div>
+  <div class="modal-body">
+    <div class="form-group"><label for="viewName">View Name *</label><input id="viewName" type="text" placeholder="e.g. My High Priority Tasks" maxlength="100" /></div>
+    <div id="saveViewModalError" style="color:var(--danger);font-size:.84rem;min-height:18px"></div>
+  </div>
+  <div class="modal-footer"><button class="btn btn-ghost" id="saveViewModalCancel">Cancel</button><button class="btn btn-primary" id="saveViewModalSave">Save View</button></div>
+</dialog>
+
+<div class="toast" id="toast"></div>
 
 <script>
-// ============================================================================
-// State
-// ============================================================================
-let currentUser = null;
-let columns     = [];
-let cards       = [];
-let dragState   = { cardId: null, sourceColumnId: null, sourcePosition: null };
+'use strict';
+let currentUser=null,columns=[],cards=[],users=[],savedViews=[],detailCardId=null,editCardId=null,editColumnId=null,dragCardId=null,notifPollTimer=null;
+const PCOLORS={critical:'var(--p-critical)',high:'var(--p-high)',medium:'var(--p-medium)',low:'var(--p-low)',minimal:'var(--p-minimal)'};
+function $(id){return document.getElementById(id)}
+function showToast(msg,type='success'){const t=$('toast');t.textContent=msg;t.className=`toast ${type} show`;setTimeout(()=>t.classList.remove('show'),3200)}
+function fmtDate(d){if(!d)return'—';return new Date(d).toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short'})}
+function fmtSize(b){if(b<1024)return b+' B';if(b<1048576)return(b/1024).toFixed(1)+' KB';return(b/1048576).toFixed(1)+' MB'}
+function fileIcon(m){if(m.startsWith('image/'))return'🖼️';if(m==='application/pdf')return'📄';if(m.includes('word'))return'📝';if(m.includes('excel')||m.includes('spreadsheet'))return'📊';if(m==='application/zip')return'🗜️';return'📎'}
+function hlMentions(t){return t.replace(/@([a-zA-Z0-9_]+)/g,'<span class="mention">@$1</span>')}
+function esc(s){if(!s)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+function dueSt(d){if(!d)return null;const now=new Date(),due=new Date(d),diff=due-now;if(diff<0)return'overdue';if(diff<86400000)return'due_soon';return'upcoming'}
 
-// ============================================================================
-// API helper
-// ============================================================================
-async function api(method, path, body) {
-    const opts = {
-        method,
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-    };
-    if (body !== undefined) opts.body = JSON.stringify(body);
-
-    const res = await fetch(path, opts);
-    if (res.status === 401) { showLogin(); return null; }
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-    return data;
+async function api(method,url,body){
+  const opts={method,headers:{'Content-Type':'application/json'},credentials:'same-origin'};
+  if(body!==undefined)opts.body=JSON.stringify(body);
+  const res=await fetch(url,opts);
+  if(res.status===401){currentUser=null;showApp(false);return null}
+  const data=await res.json().catch(()=>({}));
+  if(!res.ok)throw new Error(data.error||`HTTP ${res.status}`);
+  return data
+}
+async function apiUpload(url,fd){
+  const res=await fetch(url,{method:'POST',credentials:'same-origin',body:fd});
+  const data=await res.json().catch(()=>({}));
+  if(!res.ok)throw new Error(data.error||`HTTP ${res.status}`);
+  return data
 }
 
-// ============================================================================
-// Auth
-// ============================================================================
-function showLogin() {
-    document.getElementById('login-screen').style.display = 'flex';
-    document.getElementById('board-container').style.display = 'none';
-    currentUser = null;
-}
-function showBoard() {
-    document.getElementById('login-screen').style.display = 'none';
-    document.getElementById('board-container').style.display = 'block';
-}
+function showApp(show){$('loginScreen').style.display=show?'none':'flex';$('app').style.display=show?'flex':'none'}
 
-document.getElementById('loginForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const errEl = document.getElementById('login-error');
-    errEl.style.display = 'none';
-    try {
-        const data = await api('POST', '/api/auth/login', {
-            username: e.target.username.value.trim(),
-            password: e.target.password.value,
-        });
-        if (!data) return;
-        currentUser = data;
-        if (!currentUser.id) {
-            const me = await api('GET', '/api/auth/me');
-            if (me) currentUser = me;
-        }
-        renderUserBadge();
-        showBoard();
-        await loadBoard();
-    } catch (err) {
-        errEl.textContent = err.message;
-        errEl.style.display = 'block';
-    }
+$('loginBtn').addEventListener('click',async()=>{
+  const username=$('loginUser').value.trim(),password=$('loginPass').value;
+  $('loginError').textContent='';
+  if(!username||!password){$('loginError').textContent='Username and password are required.';return}
+  try{
+    const data=await api('POST','/api/auth/login',{username,password});
+    if(!data)return;
+    currentUser=data;$('headerUser').textContent=currentUser.username;
+    if(currentUser.role==='admin')$('adminLink').style.display='inline-flex';
+    showApp(true);await loadBoard();startNotifPoll()
+  }catch(err){$('loginError').textContent=err.message||'Login failed'}
+});
+$('loginPass').addEventListener('keydown',e=>{if(e.key==='Enter')$('loginBtn').click()});
+$('logoutBtn').addEventListener('click',async()=>{
+  await api('POST','/api/auth/logout');currentUser=null;clearInterval(notifPollTimer);
+  showApp(false);$('loginUser').value='';$('loginPass').value=''
 });
 
-document.getElementById('logoutBtn').addEventListener('click', async () => {
-    await api('POST', '/api/auth/logout').catch(() => {});
-    showLogin();
-});
-
-function renderUserBadge() {
-    const badge = document.getElementById('user-badge');
-    badge.innerHTML = `${escapeHtml(currentUser.username)}
-        <span class="role-tag ${currentUser.role}">${currentUser.role}</span>`;
-    document.getElementById('adminLink').style.display =
-        currentUser.role === 'admin' ? 'inline-block' : 'none';
-}
-
-// ============================================================================
-// Board loading & rendering
-// ============================================================================
-async function loadBoard() {
-    try {
-        const [colData, cardData] = await Promise.all([
-            api('GET', '/api/columns'),
-            api('GET', '/api/cards'),
-        ]);
-        columns = colData || [];
-        cards   = cardData || [];
-        populateAssigneeFilter();
-        renderBoard();
-    } catch (err) {
-        console.error('Failed to load board:', err);
-    }
-}
-
-function populateAssigneeFilter() {
-    const select = document.getElementById('filterAssignee');
-    const current = select.value;
-    const assignees = new Set();
-    cards.forEach(c => {
-        if (c.owner_username) assignees.add(c.owner_username);
-        if (c.assignee_username) assignees.add(c.assignee_username);
-    });
-    select.innerHTML = '<option value="">All Assignees</option>' +
-        [...assignees].sort().map(u => `<option value="${escapeHtml(u)}">${escapeHtml(u)}</option>`).join('');
-    select.value = current;
-}
-
-function getFilteredCards() {
-    const search   = document.getElementById('searchInput').value.toLowerCase().trim();
-    const priority = document.getElementById('filterPriority').value;
-    const assignee = document.getElementById('filterAssignee').value;
-
-    return cards.filter(c => {
-        if (search && !c.title.toLowerCase().includes(search) &&
-            !(c.description || '').toLowerCase().includes(search)) return false;
-        if (priority && c.priority !== priority) return false;
-        if (assignee && c.owner_username !== assignee && c.assignee_username !== assignee) return false;
-        return true;
-    });
-}
-
-function renderBoard() {
-    const board = document.getElementById('kanban-board');
-    const filteredCards = getFilteredCards();
-    const filteredIds = new Set(filteredCards.map(c => c.id));
-
-    if (columns.length === 0) {
-        board.innerHTML = `<div class="empty-board-msg"><h3>No columns configured</h3>
-            <p>${currentUser?.role === 'admin'
-                ? 'Go to the <a href="/admin.html">Admin Dashboard</a> to set up board columns.'
-                : 'Please ask an administrator to set up the board columns.'}</p></div>`;
-        return;
-    }
-
-    board.innerHTML = columns.map(col => {
-        const colCards = cards.filter(c => c.column_id == col.id)
-                              .sort((a, b) => a.position_in_column - b.position_in_column);
-        const count    = colCards.length;
-        const atLimit  = col.wip_limit && count >= col.wip_limit;
-
-        return `
-        <div class="column" data-column-id="${col.id}">
-            <div class="column-header">
-                <span class="column-title">${escapeHtml(col.name)}</span>
-                <span class="wip-counter ${atLimit ? 'wip-exceeded' : ''}">
-                    ${count}${col.wip_limit ? ' / ' + col.wip_limit : ''}
-                </span>
-            </div>
-            <div class="cards-container" data-column-id="${col.id}">
-                ${colCards.map(card => renderCard(card, filteredIds.has(card.id))).join('')}
-            </div>
-        </div>`;
-    }).join('');
-
-    attachDragListeners();
-}
-
-function renderCard(card, visible) {
-    const isOwner = currentUser && (card.owner_id === currentUser.id || currentUser.role === 'admin');
-    const visClass = card.visibility === 'private' ? 'private' : 'public';
-    const visText  = card.visibility === 'private' ? 'Private' : 'Public';
-
-    return `
-    <div class="card priority-${card.priority} ${visible ? '' : 'filtered-out'}"
-         draggable="${isOwner ? 'true' : 'false'}"
-         data-card-id="${card.id}"
-         data-owner-id="${card.owner_id}"
-         data-position="${card.position_in_column}">
-        <div class="card-title">${escapeHtml(card.title)}</div>
-        <div class="card-meta">
-            <span>
-                <span class="card-priority-tag ${card.priority}">${card.priority}</span>
-                <span class="visibility-badge ${visClass}">${visText}</span>
-            </span>
-            <span>${escapeHtml(card.owner_username || '')}${card.assignee_username ? ' &rarr; ' + escapeHtml(card.assignee_username) : ''}</span>
-        </div>
-        <div class="card-actions">
-            <button class="btn btn-secondary btn-sm card-detail-btn" data-card-id="${card.id}">Details</button>
-            ${isOwner ? `
-            <button class="btn btn-primary btn-sm card-edit-btn" data-card-id="${card.id}">Edit</button>
-            <button class="btn btn-danger btn-sm card-delete-btn" data-card-id="${card.id}">Delete</button>
-            ` : ''}
-        </div>
-    </div>`;
-}
-
-// ============================================================================
-// Search & Filter
-// ============================================================================
-document.getElementById('searchInput').addEventListener('input', renderBoard);
-document.getElementById('filterPriority').addEventListener('change', renderBoard);
-document.getElementById('filterAssignee').addEventListener('change', renderBoard);
-
-// ============================================================================
-// Card Editor Modal
-// ============================================================================
-const modal          = document.getElementById('cardModal');
-const cardIdInput    = document.getElementById('cardId');
-const cardTitleInput = document.getElementById('cardTitle');
-const cardDescInput  = document.getElementById('cardDescription');
-const cardPrioInput  = document.getElementById('cardPriority');
-const cardColInput   = document.getElementById('cardColumn');
-const cardAssInput   = document.getElementById('cardAssignee');
-const cardPubInput   = document.getElementById('cardPublished');
-const visLabelEl     = document.getElementById('visibilityLabel');
-const deleteBtn      = document.getElementById('deleteCardBtn');
-const modalErrEl     = document.getElementById('modal-error');
-const noColsWarning  = document.getElementById('noColumnsWarning');
-
-function populateColumnSelect(selectedId) {
-    if (columns.length === 0) {
-        cardColInput.innerHTML = '';
-        noColsWarning.style.display = 'block';
-        document.getElementById('saveCardBtn').disabled = true;
-        return;
-    }
-    noColsWarning.style.display = 'none';
-    document.getElementById('saveCardBtn').disabled = false;
-    cardColInput.innerHTML = columns.map(c =>
-        `<option value="${c.id}" ${c.id == selectedId ? 'selected' : ''}>${escapeHtml(c.name)}</option>`
-    ).join('');
-}
-
-function openNewModal() {
-    document.getElementById('modalTitle').textContent = 'New Card';
-    cardIdInput.value = ''; cardTitleInput.value = ''; cardDescInput.value = '';
-    cardPrioInput.value = 'medium'; cardAssInput.value = '';
-    cardPubInput.checked = true; deleteBtn.style.display = 'none';
-    modalErrEl.style.display = 'none';
-    populateColumnSelect(columns[0]?.id);
-    updateVisLabel();
-    modal.showModal();
-}
-
-function openEditModal(cardId) {
-    const card = cards.find(c => String(c.id) === String(cardId));
-    if (!card) return;
-    document.getElementById('modalTitle').textContent = 'Edit Card';
-    cardIdInput.value = card.id; cardTitleInput.value = card.title;
-    cardDescInput.value = card.description || '';
-    cardPrioInput.value = card.priority;
-    cardAssInput.value = card.assignee_username || '';
-    cardPubInput.checked = card.visibility !== 'private';
-    deleteBtn.style.display = 'inline-block';
-    modalErrEl.style.display = 'none';
-    populateColumnSelect(card.column_id);
-    updateVisLabel();
-    modal.showModal();
-}
-
-function updateVisLabel() {
-    visLabelEl.textContent = cardPubInput.checked
-        ? 'Published (visible to everyone)' : 'Private (only you, assignee, and admins)';
-}
-cardPubInput.addEventListener('change', updateVisLabel);
-
-document.getElementById('addCardBtn').addEventListener('click', openNewModal);
-document.getElementById('modalClose').addEventListener('click', () => modal.close());
-document.getElementById('modalCancelBtn').addEventListener('click', () => modal.close());
-
-document.getElementById('saveCardBtn').addEventListener('click', async () => {
-    modalErrEl.style.display = 'none';
-    const id = cardIdInput.value;
-    const visibility = cardPubInput.checked ? 'public' : 'private';
-    const payload = {
-        title: cardTitleInput.value.trim(),
-        description: cardDescInput.value.trim(),
-        priority: cardPrioInput.value,
-        column_id: parseInt(cardColInput.value, 10),
-        assignee_username: cardAssInput.value.trim() || null,
-        visibility,
-    };
-    if (!payload.title) { modalErrEl.textContent = 'Title is required.'; modalErrEl.style.display = 'block'; return; }
-    if (!payload.column_id || isNaN(payload.column_id)) { modalErrEl.textContent = 'Please select a column.'; modalErrEl.style.display = 'block'; return; }
-    try {
-        if (id) { await api('PUT', `/api/cards/${id}`, payload); }
-        else { await api('POST', '/api/cards', payload); }
-        modal.close();
-        await loadBoard();
-    } catch (err) { modalErrEl.textContent = err.message; modalErrEl.style.display = 'block'; }
-});
-
-document.getElementById('deleteCardBtn').addEventListener('click', async () => {
-    const id = cardIdInput.value;
-    if (!id || !confirm('Delete this card? This cannot be undone.')) return;
-    try { await api('DELETE', `/api/cards/${id}`); modal.close(); await loadBoard(); }
-    catch (err) { modalErrEl.textContent = err.message; modalErrEl.style.display = 'block'; }
-});
-
-// ============================================================================
-// Card Detail Modal (Comments + Activity)
-// ============================================================================
-const detailModal = document.getElementById('detailModal');
-let detailCardId  = null;
-
-document.getElementById('detailClose').addEventListener('click', () => detailModal.close());
-document.getElementById('detailCloseBtn').addEventListener('click', () => detailModal.close());
-
-async function openDetailModal(cardId) {
-    detailCardId = cardId;
-    const card = cards.find(c => String(c.id) === String(cardId));
-    if (!card) return;
-
-    document.getElementById('detailTitle').textContent = card.title;
-    document.getElementById('detailInfo').innerHTML = `
-        <p style="font-size:0.85rem;color:#555;white-space:pre-wrap;">${escapeHtml(card.description || 'No description.')}</p>
-        <p style="font-size:0.8rem;margin-top:0.5rem;color:#7f8c8d;">
-            Priority: <span class="card-priority-tag ${card.priority}">${card.priority}</span> |
-            Owner: <strong>${escapeHtml(card.owner_username || 'N/A')}</strong>
-            ${card.assignee_username ? ` | Assigned to: <strong>${escapeHtml(card.assignee_username)}</strong>` : ''}
-        </p>`;
-
-    // Load comments and activity in parallel
-    const [comments, activity] = await Promise.all([
-        api('GET', `/api/cards/${cardId}/comments`).catch(() => []),
-        api('GET', `/api/cards/${cardId}/activity`).catch(() => []),
+async function loadBoard(){
+  try{
+    [columns,cards,users]=await Promise.all([
+      api('GET','/api/columns'),
+      api('GET','/api/cards'),
+      api('GET','/api/admin/users').catch(()=>[])
     ]);
-
-    renderComments(comments || []);
-    renderActivity(activity || []);
-
-    detailModal.showModal();
+    if(!columns)return;
+    populateAssigneeFilter();populateUserSelect($('cardAssignee'));
+    await loadSavedViews();renderBoard()
+  }catch(err){console.error('loadBoard:',err);showToast('Failed to load board','error')}
 }
 
-function renderComments(comments) {
-    const list = document.getElementById('commentList');
-    if (comments.length === 0) {
-        list.innerHTML = '<li style="font-size:0.8rem;color:#999;">No comments yet.</li>';
-        return;
-    }
-    list.innerHTML = comments.map(c => `
-        <li class="comment-item">
-            <div class="comment-header">
-                <span>
-                    <span class="comment-author">${escapeHtml(c.username)}</span>
-                    <span class="comment-time">${formatTime(c.created_at)}</span>
-                </span>
-                ${(c.user_id === currentUser?.id || currentUser?.role === 'admin')
-                    ? `<button class="comment-delete-btn" data-comment-id="${c.id}">Delete</button>` : ''}
-            </div>
-            <div class="comment-body">${escapeHtml(c.body)}</div>
-        </li>`).join('');
+function populateAssigneeFilter(){
+  const sel=$('filterAssignee'),cur=sel.value;
+  sel.innerHTML='<option value="">All Assignees</option>';
+  (users||[]).forEach(u=>{const o=document.createElement('option');o.value=u.username;o.textContent=u.username;sel.appendChild(o)});
+  sel.value=cur
+}
+function populateUserSelect(sel){
+  const cur=sel.value;sel.innerHTML='<option value="">— Unassigned —</option>';
+  (users||[]).forEach(u=>{const o=document.createElement('option');o.value=u.id;o.textContent=u.username;sel.appendChild(o)});
+  sel.value=cur
+}
+function populateColumnSelect(){
+  const sel=$('cardColumn');sel.innerHTML='';
+  if(!columns||columns.length===0){sel.innerHTML='<option value="">No columns available</option>';$('cardModalSave').disabled=true;return}
+  $('cardModalSave').disabled=false;
+  columns.forEach(c=>{const o=document.createElement('option');o.value=c.id;o.textContent=c.name;sel.appendChild(o)})
 }
 
-function renderActivity(activity) {
-    const list = document.getElementById('activityTimeline');
-    if (activity.length === 0) {
-        list.innerHTML = '<li style="font-size:0.8rem;color:#999;">No activity recorded yet.</li>';
-        return;
-    }
-    list.innerHTML = activity.map(a => {
-        let desc = formatActivityAction(a);
-        return `<li>
-            <span class="activity-user">${escapeHtml(a.username || 'System')}</span>
-            ${desc}
-            <span class="activity-time">${formatTime(a.created_at)}</span>
-        </li>`;
-    }).join('');
+function getFilters(){return{search:$('searchInput').value.toLowerCase().trim(),priority:$('filterPriority').value,assignee:$('filterAssignee').value,due:$('filterDue').value}}
+function cardMatches(card,f){
+  if(f.search&&!card.title.toLowerCase().includes(f.search)&&!(card.description||'').toLowerCase().includes(f.search))return false;
+  if(f.priority&&card.priority!==f.priority)return false;
+  if(f.assignee&&card.assignee_username!==f.assignee)return false;
+  if(f.due&&(!card.due_status||card.due_status!==f.due))return false;
+  return true
 }
+[$('searchInput'),$('filterPriority'),$('filterAssignee'),$('filterDue')].forEach(el=>el.addEventListener('input',renderBoard));
+$('clearFiltersBtn').addEventListener('click',()=>{$('searchInput').value='';$('filterPriority').value='';$('filterAssignee').value='';$('filterDue').value='';document.querySelectorAll('.view-chip').forEach(c=>c.classList.remove('active'));renderBoard()});
 
-function formatActivityAction(a) {
-    const d = a.details || {};
-    switch (a.action) {
-        case 'created': return `created this card in <strong>${escapeHtml(d.column || '')}</strong>`;
-        case 'moved': return `moved from <strong>${escapeHtml(d.from_column || '')}</strong> to <strong>${escapeHtml(d.to_column || '')}</strong>`;
-        case 'priority_changed': return `changed priority from <span class="card-priority-tag ${d.from}">${d.from}</span> to <span class="card-priority-tag ${d.to}">${d.to}</span>`;
-        case 'visibility_changed': return `changed visibility from <strong>${d.from}</strong> to <strong>${d.to}</strong>`;
-        case 'edited': return `edited ${escapeHtml(d.field || 'card')}`;
-        case 'assigned': return `updated assignment`;
-        case 'comment_added': return `added a comment`;
-        default: return escapeHtml(a.action);
-    }
+async function loadSavedViews(){try{savedViews=await api('GET','/api/cards/views')||[];renderSavedViews()}catch(e){savedViews=[]}}
+function renderSavedViews(){
+  const row=$('savedViewsRow');row.innerHTML='';
+  savedViews.forEach(v=>{
+    const chip=document.createElement('div');chip.className='view-chip';chip.dataset.viewId=v.id;
+    chip.innerHTML=`${esc(v.name)} <span style="margin-left:4px;opacity:.6;cursor:pointer" data-del-view="${v.id}">✕</span>`;
+    chip.addEventListener('click',e=>{if(e.target.dataset.delView){deleteView(v.id);return}applyView(v)});
+    row.appendChild(chip)
+  })
 }
-
-function formatTime(iso) {
-    if (!iso) return '';
-    const d = new Date(iso);
-    return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+function applyView(v){
+  const f=v.filters||{};$('searchInput').value=f.search||'';$('filterPriority').value=f.priority||'';$('filterAssignee').value=f.assignee||'';$('filterDue').value=f.due||'';
+  document.querySelectorAll('.view-chip').forEach(c=>c.classList.remove('active'));
+  document.querySelector(`[data-view-id="${v.id}"]`)?.classList.add('active');renderBoard()
 }
-
-// Post comment
-document.getElementById('postCommentBtn').addEventListener('click', async () => {
-    const textarea = document.getElementById('newCommentBody');
-    const body = textarea.value.trim();
-    if (!body || !detailCardId) return;
-    try {
-        await api('POST', `/api/cards/${detailCardId}/comments`, { body });
-        textarea.value = '';
-        // Refresh comments and activity
-        const [comments, activity] = await Promise.all([
-            api('GET', `/api/cards/${detailCardId}/comments`).catch(() => []),
-            api('GET', `/api/cards/${detailCardId}/activity`).catch(() => []),
-        ]);
-        renderComments(comments || []);
-        renderActivity(activity || []);
-    } catch (err) { alert('Failed to post comment: ' + err.message); }
+async function deleteView(id){try{await api('DELETE',`/api/cards/views/${id}`);await loadSavedViews();showToast('View deleted')}catch(err){showToast(err.message,'error')}}
+$('saveViewBtn').addEventListener('click',()=>{$('viewName').value='';$('saveViewModalError').textContent='';$('saveViewModal').showModal()});
+$('saveViewModalClose').addEventListener('click',()=>$('saveViewModal').close());
+$('saveViewModalCancel').addEventListener('click',()=>$('saveViewModal').close());
+$('saveViewModalSave').addEventListener('click',async()=>{
+  const name=$('viewName').value.trim();
+  if(!name){$('saveViewModalError').textContent='Name is required';return}
+  try{await api('POST','/api/cards/views',{name,filters:getFilters()});$('saveViewModal').close();await loadSavedViews();showToast(`View "${name}" saved`)}
+  catch(err){$('saveViewModalError').textContent=err.message}
 });
 
-// Delete comment (event delegation)
-document.getElementById('commentList').addEventListener('click', async (e) => {
-    const btn = e.target.closest('.comment-delete-btn');
-    if (!btn) return;
-    if (!confirm('Delete this comment?')) return;
-    try {
-        await api('DELETE', `/api/cards/${detailCardId}/comments/${btn.dataset.commentId}`);
-        const comments = await api('GET', `/api/cards/${detailCardId}/comments`).catch(() => []);
-        renderComments(comments || []);
-    } catch (err) { alert('Failed to delete comment: ' + err.message); }
-});
-
-// ============================================================================
-// Board click delegation (Edit, Delete, Detail buttons)
-// ============================================================================
-document.getElementById('kanban-board').addEventListener('click', async (e) => {
-    const detailBtn = e.target.closest('.card-detail-btn');
-    if (detailBtn) { e.stopPropagation(); openDetailModal(detailBtn.dataset.cardId); return; }
-
-    const editBtn = e.target.closest('.card-edit-btn');
-    if (editBtn) { e.stopPropagation(); openEditModal(editBtn.dataset.cardId); return; }
-
-    const delBtn = e.target.closest('.card-delete-btn');
-    if (delBtn) {
-        e.stopPropagation();
-        const cardId = delBtn.dataset.cardId;
-        const card = cards.find(c => String(c.id) === String(cardId));
-        if (!card || !confirm(`Delete "${card.title}"?`)) return;
-        try { await api('DELETE', `/api/cards/${cardId}`); await loadBoard(); }
-        catch (err) { alert(`Delete failed: ${err.message}`); }
-        return;
-    }
-});
-
-// ============================================================================
-// Change Password modal
-// ============================================================================
-const pwModal  = document.getElementById('passwordModal');
-const pwErrEl  = document.getElementById('pw-error');
-const pwSuccEl = document.getElementById('pw-success');
-
-document.getElementById('changePasswordBtn').addEventListener('click', () => {
-    pwErrEl.style.display = 'none'; pwSuccEl.style.display = 'none';
-    document.getElementById('passwordForm').reset();
-    pwModal.showModal();
-});
-document.getElementById('pwModalClose').addEventListener('click', () => pwModal.close());
-document.getElementById('pwCancelBtn').addEventListener('click', () => pwModal.close());
-
-document.getElementById('pwSaveBtn').addEventListener('click', async () => {
-    pwErrEl.style.display = 'none'; pwSuccEl.style.display = 'none';
-    const currentPw = document.getElementById('currentPassword').value;
-    const newPw     = document.getElementById('newPassword').value;
-    const confirmPw = document.getElementById('confirmNewPassword').value;
-    if (!currentPw || !newPw || !confirmPw) { pwErrEl.textContent = 'All fields are required.'; pwErrEl.style.display = 'block'; return; }
-    if (newPw.length < 8) { pwErrEl.textContent = 'New password must be at least 8 characters.'; pwErrEl.style.display = 'block'; return; }
-    if (newPw !== confirmPw) { pwErrEl.textContent = 'New passwords do not match.'; pwErrEl.style.display = 'block'; return; }
-    try {
-        const result = await api('POST', '/api/auth/change-password', { current_password: currentPw, new_password: newPw });
-        if (!result) return;
-        pwSuccEl.textContent = result.message || 'Password changed!';
-        pwSuccEl.style.display = 'block';
-        document.getElementById('passwordForm').reset();
-        setTimeout(() => pwModal.close(), 2000);
-    } catch (err) { pwErrEl.textContent = err.message; pwErrEl.style.display = 'block'; }
-});
-
-// ============================================================================
-// Drag-and-drop with reordering within columns
-// ============================================================================
-function attachDragListeners() {
-    const board = document.getElementById('kanban-board');
-
-    board.ondragstart = (e) => {
-        const cardEl = e.target.closest('.card[draggable="true"]');
-        if (!cardEl) return;
-        dragState.cardId = cardEl.dataset.cardId;
-        dragState.sourceColumnId = parseInt(cardEl.closest('.cards-container').dataset.columnId, 10);
-        dragState.sourcePosition = parseInt(cardEl.dataset.position, 10);
-        cardEl.classList.add('dragging');
-        e.dataTransfer.effectAllowed = 'move';
-        e.dataTransfer.setData('text/plain', dragState.cardId);
-    };
-
-    board.ondragend = (e) => {
-        const cardEl = e.target.closest('.card');
-        if (cardEl) cardEl.classList.remove('dragging');
-        dragState = { cardId: null, sourceColumnId: null, sourcePosition: null };
-        clearDropIndicators();
-    };
-
-    document.querySelectorAll('.cards-container').forEach(container => {
-        container.ondragover = (e) => {
-            e.preventDefault();
-            e.dataTransfer.dropEffect = 'move';
-            container.classList.add('drag-over');
-
-            // Determine insertion position among sibling cards
-            clearDropIndicators();
-            const afterElement = getDragAfterElement(container, e.clientY);
-            if (afterElement) {
-                afterElement.classList.add('drop-indicator-above');
-            }
-        };
-
-        container.ondragleave = (e) => {
-            if (!container.contains(e.relatedTarget)) {
-                container.classList.remove('drag-over');
-                clearDropIndicators();
-            }
-        };
-
-        container.ondrop = async (e) => {
-            e.preventDefault();
-            container.classList.remove('drag-over');
-            clearDropIndicators();
-
-            const cardId = e.dataTransfer.getData('text/plain') || dragState.cardId;
-            const targetColumnId = parseInt(container.dataset.columnId, 10);
-            if (!cardId || !targetColumnId) return;
-
-            // Calculate target position
-            const afterElement = getDragAfterElement(container, e.clientY);
-            let targetPosition;
-
-            if (afterElement) {
-                targetPosition = parseInt(afterElement.dataset.position, 10);
-                // If moving within same column and from above, adjust
-                if (targetColumnId === dragState.sourceColumnId && dragState.sourcePosition < targetPosition) {
-                    targetPosition -= 1;
-                }
-            } else {
-                // Dropped at the end of the column
-                const cardsInCol = container.querySelectorAll('.card:not(.dragging):not(.filtered-out)');
-                targetPosition = cardsInCol.length;
-                // If same column, the card is already counted
-                if (targetColumnId === dragState.sourceColumnId) {
-                    targetPosition = cardsInCol.length; // Will be placed after all others
-                }
-            }
-
-            try {
-                await api('PATCH', `/api/cards/${cardId}/reorder`, {
-                    column_id: targetColumnId,
-                    position: targetPosition,
-                });
-                await loadBoard();
-            } catch (err) {
-                alert(`Move failed: ${err.message}`);
-            }
-        };
-    });
+function renderBoard(){
+  const board=$('board'),addBtn=$('addColumnBtn'),filters=getFilters();
+  board.querySelectorAll('.column').forEach(el=>el.remove());
+  board.querySelector('.empty-board')?.remove();
+  if(!columns||columns.length===0){
+    const e=document.createElement('div');e.className='empty-board';e.style.cssText='text-align:center;padding:60px 20px;color:var(--text-dim)';
+    e.innerHTML='<p style="font-size:1.5rem">📋</p><p>No columns yet. Click "+ Add Column" to get started.</p>';
+    board.insertBefore(e,addBtn);return
+  }
+  columns.forEach(col=>{
+    const colCards=(cards||[]).filter(c=>c.column_id===col.id&&cardMatches(c,filters));
+    board.insertBefore(buildColumnEl(col,colCards),addBtn)
+  })
 }
 
-function getDragAfterElement(container, y) {
-    const draggableElements = [...container.querySelectorAll('.card:not(.dragging):not(.filtered-out)')];
-
-    let closest = null;
-    let closestOffset = Number.NEGATIVE_INFINITY;
-
-    draggableElements.forEach(child => {
-        const box = child.getBoundingClientRect();
-        const offset = y - box.top - box.height / 2;
-        if (offset < 0 && offset > closestOffset) {
-            closestOffset = offset;
-            closest = child;
-        }
-    });
-
-    return closest;
+function buildColumnEl(col,colCards){
+  const el=document.createElement('div');el.className='column';el.dataset.colId=col.id;
+  const wipLabel=col.wip_limit?` / ${col.wip_limit}`:'';
+  el.innerHTML=`
+    <div class="column-header">
+      <span class="column-title">${esc(col.name)}</span>
+      <div style="display:flex;align-items:center;gap:6px">
+        <span class="column-count">${colCards.length}${wipLabel}</span>
+        ${currentUser?.role==='admin'?`<button class="card-icon-btn danger" data-del-col="${col.id}" title="Delete">✕</button>`:''}
+      </div>
+    </div>
+    <div class="column-body" data-col-id="${col.id}"></div>
+    <div class="column-add"><button data-add-card="${col.id}">+ Add Card</button></div>`;
+  const body=el.querySelector('.column-body');
+  colCards.forEach(card=>body.appendChild(buildCardEl(card)));
+  body.addEventListener('dragover',e=>{e.preventDefault();body.classList.add('drag-over');const after=getDragAfter(body,e.clientY);const dragging=document.querySelector('.dragging');if(!dragging)return;if(!after)body.appendChild(dragging);else body.insertBefore(dragging,after)});
+  body.addEventListener('dragleave',()=>body.classList.remove('drag-over'));
+  body.addEventListener('drop',async e=>{
+    e.preventDefault();body.classList.remove('drag-over');if(!dragCardId)return;
+    const newColId=parseInt(body.dataset.colId,10);
+    const dragging=body.querySelector('.card.dragging');
+    const newPos=dragging?[...body.querySelectorAll('.card')].indexOf(dragging):0;
+    try{const updated=await api('PATCH',`/api/cards/${dragCardId}/reorder`,{column_id:newColId,position:newPos});if(updated){const idx=cards.findIndex(c=>c.id===dragCardId);if(idx!==-1)cards[idx]=updated;renderBoard()}}
+    catch(err){showToast(err.message,'error');renderBoard()}
+    dragCardId=null
+  });
+  el.querySelector(`[data-del-col="${col.id}"]`)?.addEventListener('click',()=>deleteColumn(col.id,col.name));
+  el.querySelector(`[data-add-card="${col.id}"]`)?.addEventListener('click',()=>openCardModal(null,col.id));
+  return el
 }
 
-function clearDropIndicators() {
-    document.querySelectorAll('.drop-indicator-above, .drop-indicator-below').forEach(el => {
-        el.classList.remove('drop-indicator-above', 'drop-indicator-below');
-    });
+function getDragAfter(container,y){
+  const els=[...container.querySelectorAll('.card:not(.dragging)')];
+  return els.reduce((closest,el)=>{const box=el.getBoundingClientRect(),offset=y-box.top-box.height/2;if(offset<0&&offset>closest.offset)return{offset,element:el};return closest},{offset:Number.NEGATIVE_INFINITY}).element
 }
 
-// ============================================================================
-// Utilities
-// ============================================================================
-function escapeHtml(text) {
-    const d = document.createElement('div');
-    d.textContent = String(text ?? '');
-    return d.innerHTML;
+function buildCardEl(card){
+  const el=document.createElement('div');el.className='card';el.dataset.cardId=card.id;el.draggable=true;
+  const isOwner=currentUser?.role==='admin'||card.owner_id===currentUser?.id;
+  const ds=card.due_status;
+  let dueBadge='';
+  if(ds==='overdue')dueBadge='<span class="badge badge-overdue">⚠ Overdue</span>';
+  if(ds==='due_soon')dueBadge='<span class="badge badge-due-soon">⏰ Due Soon</span>';
+  const subProg=card.subtask_total>0?`<div class="card-progress"><div class="progress-label">${card.subtask_done}/${card.subtask_total} subtasks</div><div class="progress-bar-wrap"><div class="progress-bar-fill" style="width:${Math.round(card.subtask_done/card.subtask_total*100)}%"></div></div></div>`:'';
+  const attBadge=card.attachment_count>0?`<span style="font-size:.72rem;color:var(--text-dim)">📎 ${card.attachment_count}</span>`:'';
+  el.innerHTML=`
+    <div class="card-priority-bar" style="background:${PCOLORS[card.priority]||'var(--border)'}"></div>
+    <div class="card-inner">
+      <div class="card-title">${esc(card.title)}</div>
+      <div class="card-meta">
+        <span class="badge ${card.visibility==='private'?'badge-private':'badge-public'}">${card.visibility==='private'?'🔒 Private':'🌐 Public'}</span>
+        ${card.assignee_username?`<span class="badge badge-assignee">👤 ${esc(card.assignee_username)}</span>`:''}
+        ${dueBadge}${attBadge}
+      </div>
+      ${subProg}
+      <div class="card-footer">
+        <div class="card-actions">
+          <button class="card-icon-btn" data-detail="${card.id}">Details</button>
+          ${isOwner?`<button class="card-icon-btn" data-edit="${card.id}">Edit</button>`:''}
+          ${isOwner?`<button class="card-icon-btn danger" data-delete="${card.id}">Delete</button>`:''}
+        </div>
+        ${card.due_date?`<span style="font-size:.72rem;color:var(--text-dim)">${fmtDate(card.due_date)}</span>`:''}
+      </div>
+    </div>`;
+  el.addEventListener('dragstart',e=>{dragCardId=card.id;el.classList.add('dragging');e.dataTransfer.effectAllowed='move'});
+  el.addEventListener('dragend',()=>{el.classList.remove('dragging');document.querySelectorAll('.drag-over').forEach(c=>c.classList.remove('drag-over'))});
+  el.querySelector(`[data-detail="${card.id}"]`)?.addEventListener('click',e=>{e.stopPropagation();openDetailPanel(card.id)});
+  el.querySelector(`[data-edit="${card.id}"]`)?.addEventListener('click',e=>{e.stopPropagation();openCardModal(card.id)});
+  el.querySelector(`[data-delete="${card.id}"]`)?.addEventListener('click',e=>{e.stopPropagation();deleteCard(card.id,card.title)});
+  return el
 }
 
-// ============================================================================
-// Bootstrap
-// ============================================================================
-(async () => {
-    try {
-        const me = await fetch('/api/auth/me', { credentials: 'include' });
-        if (me.ok) {
-            currentUser = await me.json();
-            renderUserBadge();
-            showBoard();
-            await loadBoard();
-        }
-    } catch (_) {}
+function openCardModal(cardId,defaultColId){
+  editCardId=cardId||null;const card=cardId?cards.find(c=>c.id===cardId):null;
+  $('cardModalTitle').textContent=card?'Edit Card':'New Card';$('cardModalError').textContent='';
+  populateColumnSelect();populateUserSelect($('cardAssignee'));
+  if(card){$('cardTitle').value=card.title;$('cardDesc').value=card.description||'';$('cardPriority').value=card.priority;$('cardColumn').value=card.column_id;$('cardAssignee').value=card.assignee_id||'';$('cardVisibility').value=card.visibility;$('cardDueDate').value=card.due_date?new Date(card.due_date).toISOString().slice(0,16):''}
+  else{$('cardTitle').value='';$('cardDesc').value='';$('cardPriority').value='medium';$('cardColumn').value=defaultColId||(columns[0]?.id??'');$('cardAssignee').value='';$('cardVisibility').value='public';$('cardDueDate').value=''}
+  $('cardModal').showModal();$('cardTitle').focus()
+}
+$('cardModalClose').addEventListener('click',()=>$('cardModal').close());
+$('cardModalCancel').addEventListener('click',()=>$('cardModal').close());
+$('cardModalSave').addEventListener('click',async()=>{
+  const title=$('cardTitle').value.trim(),column_id=parseInt($('cardColumn').value,10),assigneeVal=$('cardAssignee').value,dueDateVal=$('cardDueDate').value;
+  if(!title){$('cardModalError').textContent='Title is required';return}
+  if(!column_id){$('cardModalError').textContent='Please select a column';return}
+  const payload={title,description:$('cardDesc').value.trim(),priority:$('cardPriority').value,column_id,assignee_id:assigneeVal?parseInt(assigneeVal,10):null,visibility:$('cardVisibility').value,due_date:dueDateVal?new Date(dueDateVal).toISOString():null};
+  try{
+    if(editCardId){const u=await api('PUT',`/api/cards/${editCardId}`,payload);if(u){const i=cards.findIndex(c=>c.id===editCardId);if(i!==-1)cards[i]=u}}
+    else{const n=await api('POST','/api/cards',payload);if(n)cards.push(n)}
+    $('cardModal').close();renderBoard();showToast(editCardId?'Card updated':'Card created')
+  }catch(err){$('cardModalError').textContent=err.message}
+});
+
+$('addColumnBtn').addEventListener('click',()=>{editColumnId=null;$('columnModalTitle').textContent='New Column';$('columnName').value='';$('columnWip').value='';$('columnModalError').textContent='';$('columnModal').showModal();$('columnName').focus()});
+$('columnModalClose').addEventListener('click',()=>$('columnModal').close());
+$('columnModalCancel').addEventListener('click',()=>$('columnModal').close());
+$('columnModalSave').addEventListener('click',async()=>{
+  const name=$('columnName').value.trim(),wip=$('columnWip').value?parseInt($('columnWip').value,10):null;
+  if(!name){$('columnModalError').textContent='Column name is required';return}
+  try{
+    if(editColumnId){const u=await api('PUT',`/api/columns/${editColumnId}`,{name,wip_limit:wip});if(u){const i=columns.findIndex(c=>c.id===editColumnId);if(i!==-1)columns[i]=u}}
+    else{const n=await api('POST','/api/columns',{name,wip_limit:wip});if(n)columns.push(n)}
+    $('columnModal').close();renderBoard();showToast(editColumnId?'Column updated':'Column created')
+  }catch(err){$('columnModalError').textContent=err.message}
+});
+async function deleteColumn(id,name){
+  if(!confirm(`Delete column "${name}"? Cards in it will be unassigned.`))return;
+  try{await api('DELETE',`/api/columns/${id}`);columns=columns.filter(c=>c.id!==id);cards=cards.filter(c=>c.column_id!==id);renderBoard();showToast('Column deleted')}
+  catch(err){showToast(err.message,'error')}
+}
+async function deleteCard(id,title){
+  if(!confirm(`Delete card "${title}"? This cannot be undone.`))return;
+  try{await api('DELETE',`/api/cards/${id}`);cards=cards.filter(c=>c.id!==id);if(detailCardId===id)closeDetailPanel();renderBoard();showToast('Card deleted')}
+  catch(err){showToast(err.message,'error')}
+}
+
+$('changePwBtn').addEventListener('click',()=>{$('currentPw').value='';$('newPw').value='';$('confirmPw').value='';$('passwordModalError').textContent='';$('passwordModal').showModal()});
+$('passwordModalClose').addEventListener('click',()=>$('passwordModal').close());
+$('passwordModalCancel').addEventListener('click',()=>$('passwordModal').close());
+$('passwordModalSave').addEventListener('click',async()=>{
+  const cur=$('currentPw').value,np=$('newPw').value,cp=$('confirmPw').value;
+  if(!cur||!np||!cp){$('passwordModalError').textContent='All fields are required';return}
+  if(np!==cp){$('passwordModalError').textContent='New passwords do not match';return}
+  if(np.length<8){$('passwordModalError').textContent='Password must be at least 8 characters';return}
+  try{await api('POST','/api/auth/change-password',{currentPassword:cur,newPassword:np});$('passwordModal').close();showToast('Password updated')}
+  catch(err){$('passwordModalError').textContent=err.message}
+});
+
+async function openDetailPanel(cardId){
+  detailCardId=cardId;const card=cards.find(c=>c.id===cardId);if(!card)return;
+  $('detailTitle').textContent=card.title;
+  const badges=$('detailBadges');badges.innerHTML='';
+  const vb=document.createElement('span');vb.className=`badge ${card.visibility==='private'?'badge-private':'badge-public'}`;vb.textContent=card.visibility==='private'?'🔒 Private':'🌐 Public';badges.appendChild(vb);
+  if(card.due_status==='overdue'){const b=document.createElement('span');b.className='badge badge-overdue';b.textContent='⚠ Overdue';badges.appendChild(b)}
+  if(card.due_status==='due_soon'){const b=document.createElement('span');b.className='badge badge-due-soon';b.textContent='⏰ Due Soon';badges.appendChild(b)}
+  $('detailPriority').textContent=card.priority.charAt(0).toUpperCase()+card.priority.slice(1);
+  $('detailVisibility').textContent=card.visibility==='private'?'Private':'Public';
+  $('detailAssignee').textContent=card.assignee_username||'—';
+  $('detailDueDate').textContent=fmtDate(card.due_date);
+  $('detailOwner').textContent=card.owner_username||'—';
+  $('detailCreated').textContent=fmtDate(card.created_at);
+  $('detailDesc').textContent=card.description||'No description.';
+  const isOwner=currentUser?.role==='admin'||card.owner_id===currentUser?.id;
+  $('detailEditBtn').style.display=isOwner?'inline-flex':'none';
+  $('detailEditBtn').onclick=()=>{closeDetailPanel();openCardModal(cardId)};
+  activateTab('overview');
+  $('detailPanel').classList.add('open');
+  loadSubtasks(cardId);loadAttachments(cardId);loadComments(cardId);loadActivity(cardId)
+}
+function closeDetailPanel(){$('detailPanel').classList.remove('open');detailCardId=null}
+$('detailCloseBtn').addEventListener('click',closeDetailPanel);
+document.querySelectorAll('.tab-btn').forEach(btn=>btn.addEventListener('click',()=>activateTab(btn.dataset.tab)));
+function activateTab(name){document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active',b.dataset.tab===name));document.querySelectorAll('.tab-content').forEach(c=>c.classList.toggle('active',c.id===`tab-${name}`))}
+
+async function loadSubtasks(cardId){
+  try{const st=await api('GET',`/api/cards/${cardId}/subtasks`)||[];renderSubtasks(st,cardId)}
+  catch(e){$('subtaskList').innerHTML='<p style="color:var(--text-dim);font-size:.82rem">Failed to load subtasks</p>'}
+}
+function renderSubtasks(subtasks,cardId){
+  const list=$('subtaskList');list.innerHTML='';
+  subtasks.forEach(st=>{
+    const item=document.createElement('div');item.className='subtask-item';
+    item.innerHTML=`<input type="checkbox" ${st.is_done?'checked':''} data-st-id="${st.id}" /><span class="${st.is_done?'done':''}">${esc(st.title)}</span><button data-del-st="${st.id}" title="Delete">✕</button>`;
+    item.querySelector(`[data-st-id="${st.id}"]`).addEventListener('change',async e=>{await api('PATCH',`/api/cards/${cardId}/subtasks/${st.id}`,{is_done:e.target.checked});loadSubtasks(cardId);const u=await api('GET',`/api/cards/${cardId}`);if(u){const i=cards.findIndex(c=>c.id===cardId);if(i!==-1)cards[i]=u;renderBoard()}});
+    item.querySelector(`[data-del-st="${st.id}"]`).addEventListener('click',async()=>{await api('DELETE',`/api/cards/${cardId}/subtasks/${st.id}`);loadSubtasks(cardId)});
+    list.appendChild(item)
+  })
+}
+$('addSubtaskBtn').addEventListener('click',async()=>{
+  const title=$('subtaskInput').value.trim();if(!title||!detailCardId)return;
+  try{await api('POST',`/api/cards/${detailCardId}/subtasks`,{title});$('subtaskInput').value='';loadSubtasks(detailCardId);const u=await api('GET',`/api/cards/${detailCardId}`);if(u){const i=cards.findIndex(c=>c.id===detailCardId);if(i!==-1)cards[i]=u;renderBoard()}}
+  catch(err){showToast(err.message,'error')}
+});
+$('subtaskInput').addEventListener('keydown',e=>{if(e.key==='Enter')$('addSubtaskBtn').click()});
+
+async function loadAttachments(cardId){
+  try{const a=await api('GET',`/api/cards/${cardId}/attachments`)||[];renderAttachments(a,cardId)}
+  catch(e){$('attachmentList').innerHTML='<p style="color:var(--text-dim);font-size:.82rem">Failed to load files</p>'}
+}
+function renderAttachments(attachments,cardId){
+  const list=$('attachmentList');list.innerHTML='';
+  if(!attachments.length){list.innerHTML='<p style="color:var(--text-dim);font-size:.82rem">No files attached yet.</p>';return}
+  attachments.forEach(att=>{
+    const item=document.createElement('div');item.className='attachment-item';
+    const canDel=currentUser?.role==='admin'||att.uploaded_by===currentUser?.id;
+    item.innerHTML=`<span class="attachment-icon">${fileIcon(att.mime_type)}</span><div class="attachment-info"><div class="attachment-name">${esc(att.filename)}</div><div class="attachment-meta">${fmtSize(att.size_bytes)} · ${esc(att.uploaded_by_username)} · ${fmtDate(att.created_at)}</div></div><div class="attachment-actions"><a href="/api/cards/${cardId}/attachments/${att.id}" class="btn btn-ghost btn-sm" download="${esc(att.filename)}">⬇</a>${canDel?`<button class="btn btn-danger btn-sm" data-del-att="${att.id}">✕</button>`:''}</div>`;
+    item.querySelector(`[data-del-att="${att.id}"]`)?.addEventListener('click',async()=>{await api('DELETE',`/api/cards/${cardId}/attachments/${att.id}`);loadAttachments(cardId);const u=await api('GET',`/api/cards/${cardId}`);if(u){const i=cards.findIndex(c=>c.id===cardId);if(i!==-1)cards[i]=u;renderBoard()}});
+    list.appendChild(item)
+  })
+}
+$('uploadArea').addEventListener('click',()=>$('fileInput').click());
+$('fileInput').addEventListener('change',async e=>{
+  const file=e.target.files[0];if(!file||!detailCardId)return;
+  const fd=new FormData();fd.append('file',file);
+  try{await apiUpload(`/api/cards/${detailCardId}/attachments`,fd);$('fileInput').value='';loadAttachments(detailCardId);const u=await api('GET',`/api/cards/${detailCardId}`);if(u){const i=cards.findIndex(c=>c.id===detailCardId);if(i!==-1)cards[i]=u;renderBoard()};showToast('File uploaded')}
+  catch(err){showToast(err.message,'error')}
+});
+
+async function loadComments(cardId){
+  try{const c=await api('GET',`/api/cards/${cardId}/comments`)||[];renderComments(c,cardId)}
+  catch(e){$('commentList').innerHTML='<p style="color:var(--text-dim);font-size:.82rem">Failed to load comments</p>'}
+}
+function renderComments(comments,cardId){
+  const list=$('commentList');list.innerHTML='';
+  if(!comments.length){list.innerHTML='<p style="color:var(--text-dim);font-size:.82rem">No comments yet.</p>';return}
+  comments.forEach(c=>{
+    const item=document.createElement('div');item.className='comment-item';
+    const canDel=currentUser?.role==='admin'||c.user_id===currentUser?.id;
+    item.innerHTML=`<div class="comment-header"><span class="comment-author">${esc(c.username)}</span><div style="display:flex;align-items:center;gap:8px"><span class="comment-time">${fmtDate(c.created_at)}</span>${canDel?`<button class="card-icon-btn danger btn-sm" data-del-comment="${c.id}">✕</button>`:''}</div></div><div class="comment-body">${hlMentions(esc(c.body))}</div>`;
+    item.querySelector(`[data-del-comment="${c.id}"]`)?.addEventListener('click',async()=>{await api('DELETE',`/api/cards/${cardId}/comments/${c.id}`);loadComments(cardId)});
+    list.appendChild(item)
+  })
+}
+$('postCommentBtn').addEventListener('click',async()=>{
+  const body=$('commentInput').value.trim();if(!body||!detailCardId)return;
+  try{await api('POST',`/api/cards/${detailCardId}/comments`,{body});$('commentInput').value='';loadComments(detailCardId);showToast('Comment posted')}
+  catch(err){showToast(err.message,'error')}
+});
+
+async function loadActivity(cardId){
+  try{const a=await api('GET',`/api/cards/${cardId}/activity`)||[];renderActivity(a)}
+  catch(e){$('activityList').innerHTML='<p style="color:var(--text-dim);font-size:.82rem">Failed to load activity</p>'}
+}
+function renderActivity(activities){
+  const list=$('activityList');list.innerHTML='';
+  if(!activities.length){list.innerHTML='<p style="color:var(--text-dim);font-size:.82rem">No activity recorded yet.</p>';return}
+  activities.forEach(a=>{
+    const item=document.createElement('div');item.className='activity-item';
+    item.innerHTML=`<div class="activity-dot"></div><div class="activity-content"><div class="activity-text">${fmtActivity(a)}</div><div class="activity-time">${fmtDate(a.created_at)}</div></div>`;
+    list.appendChild(item)
+  })
+}
+function fmtActivity(a){
+  const who=a.username?`<strong>${esc(a.username)}</strong>`:'Someone',d=a.details||{};
+  switch(a.action){
+    case'created':return`${who} created this card in <em>${esc(d.column||'')}</em>`;
+    case'moved':return`${who} moved from <em>${esc(d.from_column||'')}</em> → <em>${esc(d.to_column||'')}</em>`;
+    case'edited':return`${who} updated the ${d.field||'card'}`;
+    case'priority_changed':return`${who} changed priority from <em>${d.from}</em> → <em>${d.to}</em>`;
+    case'visibility_changed':return`${who} changed visibility from <em>${d.from}</em> → <em>${d.to}</em>`;
+    case'assigned':return`${who} assigned this card`;
+    case'due_date_set':return`${who} set due date to <em>${fmtDate(d.due_date)}</em>`;
+    case'comment_added':return`${who} added a comment`;
+    case'subtask_added':return`${who} added subtask: <em>${esc(d.title||'')}</em>`;
+    case'file_attached':return`${who} attached <em>${esc(d.filename||'')}</em>`;
+    default:return`${who} performed: ${a.action}`
+  }
+}
+
+function startNotifPoll(){loadNotifications();notifPollTimer=setInterval(loadNotifications,30000)}
+async function loadNotifications(){
+  try{
+    const data=await api('GET','/api/cards/notifications');if(!data)return;
+    const{notifications,unread_count}=data,badge=$('notifBadge');
+    if(unread_count>0){badge.textContent=unread_count>99?'99+':unread_count;badge.style.display='flex'}else{badge.style.display='none'}
+    renderNotifications(notifications)
+  }catch(e){}
+}
+function renderNotifications(notifications){
+  const list=$('notifList');
+  if(!notifications||!notifications.length){list.innerHTML='<div class="notif-empty">No notifications</div>';return}
+  list.innerHTML='';
+  notifications.forEach(n=>{
+    const item=document.createElement('div');item.className=`notif-item ${n.is_read?'':'unread'}`;
+    item.innerHTML=`<div class="notif-dot ${n.is_read?'read':''}"></div><div><div class="notif-text">${esc(n.message)}</div><div class="notif-time">${fmtDate(n.created_at)}</div></div>`;
+    item.addEventListener('click',async()=>{if(!n.is_read){await api('PATCH',`/api/cards/notifications/${n.id}/read`);n.is_read=true;item.classList.remove('unread');item.querySelector('.notif-dot').classList.add('read');loadNotifications()}if(n.card_id){closeNotifPanel();const card=cards.find(c=>c.id===n.card_id);if(card)openDetailPanel(n.card_id)}});
+    list.appendChild(item)
+  })
+}
+$('notifBtn').addEventListener('click',e=>{e.stopPropagation();$('notifPanel').classList.toggle('open')});
+$('markAllReadBtn').addEventListener('click',async()=>{await api('PATCH','/api/cards/notifications/read-all');loadNotifications()});
+function closeNotifPanel(){$('notifPanel').classList.remove('open')}
+document.addEventListener('click',e=>{if(!$('notifPanel').contains(e.target)&&e.target!==$('notifBtn'))closeNotifPanel()});
+
+(async()=>{
+  try{
+    const me=await fetch('/api/auth/me',{credentials:'same-origin'});
+    if(me.ok){currentUser=await me.json();$('headerUser').textContent=currentUser.username;if(currentUser.role==='admin')$('adminLink').style.display='inline-flex';showApp(true);await loadBoard();startNotifPoll()}
+  }catch(e){}
 })();
 </script>
 </body>

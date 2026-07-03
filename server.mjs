@@ -14,6 +14,7 @@ import connectPg    from 'connect-pg-simple';
 import helmet       from 'helmet';
 import rateLimit    from 'express-rate-limit';
 
+import sgMail       from '@sendgrid/mail';
 import { authenticate, requireRole } from './middleware/auth.js';
 import authRoutes   from './routes/auth.js';
 import columnRoutes from './routes/columns.js';
@@ -137,9 +138,15 @@ app.get('/health', async (_req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// Global error handler
+// Global error handler (also handles multer file upload errors)
 // ---------------------------------------------------------------------------
 app.use((err, _req, res, _next) => {
+    if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(413).json({ error: 'File too large. Maximum size is 10 MB.' });
+    }
+    if (err.message && err.message.startsWith('File type')) {
+        return res.status(415).json({ error: err.message });
+    }
     console.error('Unhandled error:', err);
     res.status(500).json({ error: 'Internal server error' });
 });
@@ -169,6 +176,106 @@ async function purgeOldAuditLogs() {
 setTimeout(purgeOldAuditLogs, 5_000);
 // Then run every 24 hours
 setInterval(purgeOldAuditLogs, 24 * 60 * 60 * 1000);
+
+// ---------------------------------------------------------------------------
+// Due-date reminder scheduler
+// Runs every hour. Sends email + in-app notification for cards due within 24h
+// or already overdue, once per card per day (tracked via notification table).
+// ---------------------------------------------------------------------------
+sgMail.setApiKey(process.env.SENDGRID_API_KEY || '');
+
+async function sendDueDateReminders() {
+    try {
+        // Cards due within the next 24 hours that haven't had a due_soon notification today
+        const dueSoon = await db.query(
+            `SELECT c.id, c.title, c.due_date, c.assignee_id, c.owner_id,
+                    u.email, u.username
+             FROM cards c
+             JOIN users u ON u.id = COALESCE(c.assignee_id, c.owner_id)
+             WHERE c.due_date IS NOT NULL
+               AND c.due_date > NOW()
+               AND c.due_date <= NOW() + INTERVAL '24 hours'
+               AND NOT EXISTS (
+                   SELECT 1 FROM notifications n
+                   WHERE n.card_id = c.id
+                     AND n.type = 'due_soon'
+                     AND n.created_at > NOW() - INTERVAL '20 hours'
+               )`
+        );
+
+        for (const card of dueSoon.rows) {
+            const recipientId = card.assignee_id || card.owner_id;
+            if (!recipientId) continue;
+
+            await db.query(
+                `INSERT INTO notifications (user_id, type, card_id, message)
+                 VALUES ($1, 'due_soon', $2, $3)`,
+                [recipientId, card.id, `Card "${card.title}" is due within 24 hours`]
+            );
+
+            if (process.env.SENDGRID_API_KEY && process.env.FROM_EMAIL && card.email) {
+                await sgMail.send({
+                    to:      card.email,
+                    from:    process.env.FROM_EMAIL,
+                    subject: `Due soon: "${card.title}"`,
+                    html:    `<p>Hi ${card.username},</p>
+                              <p>The card <strong>"${card.title}"</strong> is due within 24 hours.</p>
+                              <p><strong>Due:</strong> ${new Date(card.due_date).toLocaleString()}</p>
+                              <p><a href="${process.env.APP_URL || ''}">View the board</a></p>`,
+                }).catch(e => console.error('Due-soon email error:', e.message));
+            }
+        }
+
+        // Cards that are overdue and haven't had an overdue notification today
+        const overdue = await db.query(
+            `SELECT c.id, c.title, c.due_date, c.assignee_id, c.owner_id,
+                    u.email, u.username
+             FROM cards c
+             JOIN users u ON u.id = COALESCE(c.assignee_id, c.owner_id)
+             WHERE c.due_date IS NOT NULL
+               AND c.due_date < NOW()
+               AND NOT EXISTS (
+                   SELECT 1 FROM notifications n
+                   WHERE n.card_id = c.id
+                     AND n.type = 'overdue'
+                     AND n.created_at > NOW() - INTERVAL '20 hours'
+               )`
+        );
+
+        for (const card of overdue.rows) {
+            const recipientId = card.assignee_id || card.owner_id;
+            if (!recipientId) continue;
+
+            await db.query(
+                `INSERT INTO notifications (user_id, type, card_id, message)
+                 VALUES ($1, 'overdue', $2, $3)`,
+                [recipientId, card.id, `Card "${card.title}" is overdue`]
+            );
+
+            if (process.env.SENDGRID_API_KEY && process.env.FROM_EMAIL && card.email) {
+                await sgMail.send({
+                    to:      card.email,
+                    from:    process.env.FROM_EMAIL,
+                    subject: `Overdue: "${card.title}"`,
+                    html:    `<p>Hi ${card.username},</p>
+                              <p>The card <strong>"${card.title}"</strong> is <strong>overdue</strong>.</p>
+                              <p><strong>Was due:</strong> ${new Date(card.due_date).toLocaleString()}</p>
+                              <p><a href="${process.env.APP_URL || ''}">View the board</a></p>`,
+                }).catch(e => console.error('Overdue email error:', e.message));
+            }
+        }
+
+        if (dueSoon.rows.length + overdue.rows.length > 0) {
+            console.log(`[Due Reminders] Sent ${dueSoon.rows.length} due-soon and ${overdue.rows.length} overdue notifications.`);
+        }
+    } catch (err) {
+        console.error('[Due Reminders] Error:', err.message);
+    }
+}
+
+// Run due-date check on startup and every hour
+setTimeout(sendDueDateReminders, 10_000);
+setInterval(sendDueDateReminders, 60 * 60 * 1000);
 
 // ---------------------------------------------------------------------------
 // Start

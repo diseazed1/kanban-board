@@ -20,6 +20,16 @@ DO $$ BEGIN
     CREATE TYPE visibility AS ENUM ('public', 'private');
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
+DO $$ BEGIN
+    CREATE TYPE notification_type AS ENUM (
+        'assigned',         -- card assigned to you
+        'mentioned',        -- @mentioned in a comment
+        'due_soon',         -- card due within 24 hours
+        'overdue',          -- card past due date
+        'comment_added'     -- someone commented on your card
+    );
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
 -- ---------------------------------------------------------------------------
 -- Users
 -- ---------------------------------------------------------------------------
@@ -73,8 +83,38 @@ CREATE TABLE IF NOT EXISTS cards (
     -- 'public'  = visible to every authenticated user on the board
     -- 'private' = visible only to owner, assignee, and admins
     visibility        visibility   NOT NULL DEFAULT 'public',
+    -- Due date support
+    due_date          TIMESTAMPTZ  DEFAULT NULL,
     created_at        TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     updated_at        TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+-- ---------------------------------------------------------------------------
+-- Subtasks / Checklists  (ordered checklist items on a card)
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS card_subtasks (
+    id          SERIAL       PRIMARY KEY,
+    card_id     UUID         NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+    title       VARCHAR(200) NOT NULL,
+    is_done     BOOLEAN      NOT NULL DEFAULT FALSE,
+    position    INT          NOT NULL DEFAULT 0,
+    created_by  INT          REFERENCES users(id) ON DELETE SET NULL,
+    created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    updated_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+-- ---------------------------------------------------------------------------
+-- File Attachments  (files attached to cards, stored in Fly.io volume)
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS card_attachments (
+    id          SERIAL       PRIMARY KEY,
+    card_id     UUID         NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+    uploaded_by INT          REFERENCES users(id) ON DELETE SET NULL,
+    filename    VARCHAR(255) NOT NULL,   -- original filename shown to users
+    stored_name VARCHAR(255) NOT NULL,   -- UUID-based name on disk (no collisions)
+    mime_type   VARCHAR(100) NOT NULL,
+    size_bytes  BIGINT       NOT NULL,
+    created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
 -- ---------------------------------------------------------------------------
@@ -90,6 +130,33 @@ CREATE TABLE IF NOT EXISTS card_comments (
 );
 
 -- ---------------------------------------------------------------------------
+-- Notifications  (per-user inbox: assignments, @mentions, due alerts)
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS notifications (
+    id          SERIAL            PRIMARY KEY,
+    user_id     INT               NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    type        notification_type NOT NULL,
+    card_id     UUID              REFERENCES cards(id) ON DELETE CASCADE,
+    actor_id    INT               REFERENCES users(id) ON DELETE SET NULL,
+    message     TEXT              NOT NULL,
+    is_read     BOOLEAN           NOT NULL DEFAULT FALSE,
+    created_at  TIMESTAMPTZ       NOT NULL DEFAULT NOW()
+);
+
+-- ---------------------------------------------------------------------------
+-- Saved Filter Views  (per-user saved board filter combinations)
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS saved_views (
+    id          SERIAL       PRIMARY KEY,
+    user_id     INT          NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name        VARCHAR(100) NOT NULL,
+    filters     JSONB        NOT NULL DEFAULT '{}',
+    -- e.g. {"priority":"high","assignee":"alice","search":"login bug"}
+    created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    UNIQUE(user_id, name)
+);
+
+-- ---------------------------------------------------------------------------
 -- Card activity log  (timeline of card events: moves, edits, etc.)
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS card_activity (
@@ -98,7 +165,8 @@ CREATE TABLE IF NOT EXISTS card_activity (
     user_id     INT          REFERENCES users(id) ON DELETE SET NULL,
     action      VARCHAR(50)  NOT NULL,
     -- e.g. 'created', 'moved', 'edited', 'priority_changed',
-    --      'visibility_changed', 'assigned', 'comment_added'
+    --      'visibility_changed', 'assigned', 'comment_added',
+    --      'due_date_set', 'subtask_added', 'file_attached'
     details     JSONB        NOT NULL DEFAULT '{}',
     created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
@@ -122,8 +190,13 @@ CREATE INDEX IF NOT EXISTS idx_cards_column       ON cards(column_id);
 CREATE INDEX IF NOT EXISTS idx_cards_owner        ON cards(owner_id);
 CREATE INDEX IF NOT EXISTS idx_cards_assignee     ON cards(assignee_id);
 CREATE INDEX IF NOT EXISTS idx_cards_visibility   ON cards(visibility);
+CREATE INDEX IF NOT EXISTS idx_cards_due_date     ON cards(due_date) WHERE due_date IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_subtasks_card      ON card_subtasks(card_id);
+CREATE INDEX IF NOT EXISTS idx_attachments_card   ON card_attachments(card_id);
 CREATE INDEX IF NOT EXISTS idx_comments_card      ON card_comments(card_id);
 CREATE INDEX IF NOT EXISTS idx_comments_user      ON card_comments(user_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, is_read);
+CREATE INDEX IF NOT EXISTS idx_saved_views_user   ON saved_views(user_id);
 CREATE INDEX IF NOT EXISTS idx_activity_card      ON card_activity(card_id);
 CREATE INDEX IF NOT EXISTS idx_activity_created   ON card_activity(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_audit_user         ON audit_log(user_id);
