@@ -1,7 +1,7 @@
 // reset_admin_pw.cjs — Reset the admin user's password
 // Usage: node reset_admin_pw.cjs <new_password>
 const { Pool } = require('pg');
-const bcrypt = require('bcrypt');
+const argon2 = require('argon2');
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -15,7 +15,7 @@ async function run() {
     process.exit(1);
   }
 
-  const hash = await bcrypt.hash(newPassword, 12);
+  const hash = await argon2.hash(newPassword);
   const result = await pool.query(
     `UPDATE users SET password_hash = $1 WHERE username = 'admin' RETURNING id, username`,
     [hash]
