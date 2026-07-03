@@ -1,503 +1,462 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Dashboard — Kanban Board</title>
-    <style>
-        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #f0f2f5; color: #2c3e50; }
-
-        /* Header */
-        header {
-            background: #2c3e50; color: white; padding: 0.75rem 1.5rem;
-            display: flex; justify-content: space-between; align-items: center;
-            position: sticky; top: 0; z-index: 100;
-        }
-        header h1 { font-size: 1.2rem; }
-        .header-nav { display: flex; gap: 0.75rem; align-items: center; }
-
-        /* Layout */
-        .admin-container { max-width: 1200px; margin: 2rem auto; padding: 0 1rem; }
-        .section {
-            background: white; border-radius: 10px; padding: 1.5rem;
-            margin-bottom: 1.5rem; box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-        }
-        .section-header {
-            display: flex; justify-content: space-between; align-items: center;
-            margin-bottom: 1.25rem; padding-bottom: 0.75rem; border-bottom: 1px solid #eee;
-        }
-        .section-header h2 { font-size: 1.1rem; }
-
-        /* Tables */
-        table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
-        th { text-align: left; padding: 0.6rem 0.75rem; background: #f8f9fa; font-weight: 600; border-bottom: 2px solid #eee; }
-        td { padding: 0.6rem 0.75rem; border-bottom: 1px solid #f0f0f0; vertical-align: middle; }
-        tr:last-child td { border-bottom: none; }
-        tr:hover td { background: #fafafa; }
-
-        /* Buttons */
-        .btn {
-            display: inline-block; padding: 0.4rem 0.8rem; border: none;
-            border-radius: 5px; font-size: 0.8rem; font-weight: 600;
-            cursor: pointer; transition: opacity 0.2s;
-        }
-        .btn:hover { opacity: 0.85; }
-        .btn-primary   { background: #3498db; color: white; }
-        .btn-success   { background: #27ae60; color: white; }
-        .btn-danger    { background: #e74c3c; color: white; }
-        .btn-secondary { background: #95a5a6; color: white; }
-        .btn-warning   { background: #f39c12; color: white; }
-
-        /* Badges */
-        .badge {
-            display: inline-block; padding: 0.2rem 0.5rem; border-radius: 4px;
-            font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
-        }
-        .badge.admin   { background: #fde8e8; color: #c0392b; }
-        .badge.user    { background: #d5f5e3; color: #1e8449; }
-        .badge.viewer  { background: #e8f4fd; color: #2980b9; }
-        .badge.active  { background: #d5f5e3; color: #1e8449; }
-        .badge.inactive{ background: #f0f0f0; color: #7f8c8d; }
-
-        /* Forms */
-        .form-inline { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
-        .form-inline input, .form-inline select {
-            padding: 0.5rem 0.75rem; border: 1px solid #ddd; border-radius: 5px;
-            font-size: 0.875rem;
-        }
-        .form-inline input:focus, .form-inline select:focus { outline: none; border-color: #3498db; }
-
-        /* Alerts */
-        .alert { padding: 0.75rem 1rem; border-radius: 6px; margin-bottom: 1rem; font-size: 0.875rem; }
-        .alert-error   { background: #fde8e8; color: #c0392b; }
-        .alert-success { background: #d5f5e3; color: #1e8449; }
-
-        /* Pagination */
-        .pagination { display: flex; gap: 0.5rem; align-items: center; margin-top: 1rem; }
-
-        /* Empty state */
-        .empty-state { text-align: center; padding: 2rem; color: #95a5a6; font-style: italic; }
-
-        /* Access denied */
-        #access-denied { display: none; text-align: center; padding: 4rem; }
-    </style>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Admin Dashboard — Kanban Board</title>
+<link rel="stylesheet" href="/theme.css"/>
+<style>
+body{background:var(--bg-page);transition:background var(--transition)}
+.admin-layout{display:flex;flex-direction:column;min-height:100vh}
+.admin-main{flex:1;padding:1.5rem;max-width:1200px;margin:0 auto;width:100%}
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1rem;margin-bottom:1.5rem}
+.stat-card{background:var(--bg-surface);border:1px solid var(--border-color);border-radius:var(--border-radius);padding:1.1rem 1.25rem;transition:background var(--transition)}
+.stat-label{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin-bottom:.3rem}
+.stat-value{font-size:1.8rem;font-weight:800;color:var(--text-primary)}
+.stat-sub{font-size:.75rem;color:var(--text-muted);margin-top:.2rem}
+.panel{background:var(--bg-surface);border:1px solid var(--border-color);border-radius:var(--border-radius);overflow:hidden;margin-bottom:1.5rem;transition:background var(--transition)}
+.panel-header{display:flex;align-items:center;justify-content:space-between;padding:.9rem 1.25rem;border-bottom:1px solid var(--border-color);gap:.75rem;flex-wrap:wrap}
+.panel-header h2{font-size:.95rem;font-weight:700}
+.panel-body{padding:1.25rem}
+.data-table{width:100%;border-collapse:collapse;font-size:.875rem}
+.data-table th{background:var(--bg-surface-alt);color:var(--text-secondary);font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.4px;padding:.6rem 1rem;text-align:left;border-bottom:1px solid var(--border-color);white-space:nowrap}
+.data-table td{padding:.7rem 1rem;border-bottom:1px solid var(--border-color);color:var(--text-primary);vertical-align:middle}
+.data-table tr:last-child td{border-bottom:none}
+.data-table tr:hover td{background:var(--bg-surface-alt)}
+.actions-cell{display:flex;gap:.35rem;flex-wrap:wrap}
+.pagination{display:flex;align-items:center;justify-content:space-between;padding:.75rem 1.25rem;border-top:1px solid var(--border-color);font-size:.82rem;color:var(--text-muted);flex-wrap:wrap;gap:.5rem}
+.pagination-btns{display:flex;gap:.35rem}
+.badge-admin{background:rgba(99,102,241,.15);color:#6366f1}
+.badge-user{background:rgba(59,130,246,.15);color:var(--brand-primary)}
+.badge-viewer{background:rgba(148,163,184,.15);color:var(--text-muted)}
+.badge-active{background:rgba(22,163,74,.15);color:var(--color-success)}
+.badge-inactive{background:rgba(220,38,38,.15);color:var(--color-danger)}
+.log-action{font-size:.72rem;font-weight:700;padding:.15rem .5rem;border-radius:999px;background:var(--bg-surface-alt);color:var(--text-secondary);font-family:monospace}
+.empty-state{padding:2.5rem;text-align:center;color:var(--text-muted);font-size:.875rem}
+.search-bar{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
+.search-bar input{max-width:240px}
+.search-bar select{max-width:160px}
+</style>
 </head>
 <body>
+<div class="admin-layout">
 
-<header>
-    <h1>Admin Dashboard</h1>
-    <div class="header-nav">
-        <span id="admin-user-badge" style="font-size:0.85rem;opacity:0.8;"></span>
-        <a href="/" class="btn btn-secondary">← Board</a>
-        <button id="logoutBtn" class="btn btn-secondary">Logout</button>
+  <header class="app-header">
+    <div class="logo">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="7" height="18" rx="1"/><rect x="14" y="3" width="7" height="11" rx="1"/><rect x="14" y="18" width="7" height="3" rx="1"/></svg>
+      Admin Dashboard
     </div>
-</header>
+    <div class="header-actions">
+      <span id="header-user" style="font-size:.82rem;color:rgba(255,255,255,.7)"></span>
+      <button class="btn-icon" id="theme-toggle-btn" title="Toggle Dark Mode (D)">🌙</button>
+      <a href="/" class="btn btn-ghost btn-sm">← Board</a>
+      <button class="btn btn-danger btn-sm" id="logout-btn">Sign Out</button>
+    </div>
+  </header>
 
-<div id="access-denied">
+  <main class="admin-main" id="admin-main" style="display:none">
+
+    <!-- Stats -->
+    <div class="stat-grid" id="stat-grid">
+      <div class="stat-card"><div class="stat-label">Total Users</div><div class="stat-value" id="stat-users">—</div></div>
+      <div class="stat-card"><div class="stat-label">Active Users</div><div class="stat-value" id="stat-active">—</div></div>
+      <div class="stat-card"><div class="stat-label">Total Cards</div><div class="stat-value" id="stat-cards">—</div></div>
+      <div class="stat-card"><div class="stat-label">Pending Invites</div><div class="stat-value" id="stat-invites">—</div></div>
+      <div class="stat-card"><div class="stat-label">Audit Log Entries</div><div class="stat-value" id="stat-logs">—</div></div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs" style="margin-bottom:1.25rem;">
+      <button class="tab-btn active" data-tab="users">👥 Users</button>
+      <button class="tab-btn" data-tab="invites">✉️ Invites</button>
+      <button class="tab-btn" data-tab="labels">🏷️ Labels</button>
+      <button class="tab-btn" data-tab="audit">📋 Audit Log</button>
+    </div>
+
+    <!-- Users Tab -->
+    <div class="tab-pane active" id="tab-users">
+      <div class="panel">
+        <div class="panel-header">
+          <h2>User Management</h2>
+          <div class="search-bar">
+            <input type="search" id="user-search" placeholder="Search users…" style="max-width:200px;"/>
+            <select id="user-role-filter"><option value="">All Roles</option><option value="admin">Admin</option><option value="user">User</option><option value="viewer">Viewer</option></select>
+          </div>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="data-table">
+            <thead><tr><th>Username</th><th>Email</th><th>Role</th><th>Status</th><th>Created</th><th>Actions</th></tr></thead>
+            <tbody id="users-tbody"><tr><td colspan="6" class="empty-state">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Invites Tab -->
+    <div class="tab-pane" id="tab-invites">
+      <div class="panel" style="margin-bottom:1.25rem;">
+        <div class="panel-header"><h2>Send Invite</h2></div>
+        <div class="panel-body">
+          <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:.75rem;align-items:end;">
+            <div class="form-group"><label>Email Address</label><input id="invite-email" type="email" placeholder="user@example.com"/></div>
+            <div class="form-group"><label>Role</label><select id="invite-role"><option value="user">User</option><option value="viewer">Viewer</option><option value="admin">Admin</option></select></div>
+            <button class="btn btn-primary" id="send-invite-btn">Send Invite</button>
+          </div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-header"><h2>Pending Invites</h2><button class="btn btn-secondary btn-sm" id="refresh-invites-btn">↻ Refresh</button></div>
+        <div style="overflow-x:auto">
+          <table class="data-table">
+            <thead><tr><th>Email</th><th>Role</th><th>Sent</th><th>Expires</th><th>Actions</th></tr></thead>
+            <tbody id="invites-tbody"><tr><td colspan="5" class="empty-state">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Labels Tab -->
+    <div class="tab-pane" id="tab-labels">
+      <div class="panel" style="margin-bottom:1.25rem;">
+        <div class="panel-header"><h2>Create Label</h2></div>
+        <div class="panel-body">
+          <div style="display:grid;grid-template-columns:1fr auto auto;gap:.75rem;align-items:end;">
+            <div class="form-group"><label>Label Name</label><input id="label-name" type="text" placeholder="e.g. Frontend, Blocked, Design" maxlength="30"/></div>
+            <div class="form-group"><label>Color</label><input id="label-color" type="color" value="#3b82f6" style="width:60px;height:38px;padding:2px;cursor:pointer;"/></div>
+            <button class="btn btn-primary" id="create-label-btn">Create</button>
+          </div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-header"><h2>All Labels</h2></div>
+        <div class="panel-body" id="labels-list"><div class="empty-state">Loading…</div></div>
+      </div>
+    </div>
+
+    <!-- Audit Log Tab -->
+    <div class="tab-pane" id="tab-audit">
+      <div class="panel">
+        <div class="panel-header">
+          <h2>Audit Log</h2>
+          <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
+            <select id="purge-days" style="width:auto;padding:.35rem .65rem;font-size:.82rem;"><option value="7">Purge &gt; 7 days</option><option value="30">Purge &gt; 30 days</option><option value="60">Purge &gt; 60 days</option><option value="90" selected>Purge &gt; 90 days</option></select>
+            <button class="btn btn-warning btn-sm" id="purge-btn">Purge Old</button>
+            <button class="btn btn-danger btn-sm" id="clear-log-btn">Clear All</button>
+          </div>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="data-table">
+            <thead><tr><th>Action</th><th>User</th><th>IP</th><th>Details</th><th>Time</th></tr></thead>
+            <tbody id="audit-tbody"><tr><td colspan="5" class="empty-state">Loading…</td></tr></tbody>
+          </table>
+        </div>
+        <div class="pagination" id="audit-pagination">
+          <span id="audit-page-info">Page 1</span>
+          <div class="pagination-btns">
+            <button class="btn btn-secondary btn-sm" id="audit-prev-btn">← Prev</button>
+            <button class="btn btn-secondary btn-sm" id="audit-next-btn">Next →</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <div id="access-denied" style="display:none;flex:1;align-items:center;justify-content:center;flex-direction:column;gap:1rem;padding:2rem;text-align:center;">
+    <div style="font-size:3rem;">🔒</div>
     <h2>Access Denied</h2>
-    <p>You must be an admin to view this page.</p>
-    <a href="/" class="btn btn-primary" style="margin-top:1rem;">Go to Board</a>
+    <p style="color:var(--text-muted);">You must be an admin to view this page.</p>
+    <a href="/" class="btn btn-primary">← Back to Board</a>
+  </div>
 </div>
 
-<div class="admin-container" id="admin-content" style="display:none;">
+<!-- Reset Password Modal -->
+<dialog id="reset-pw-modal">
+  <div class="modal-header"><h2>Reset Password</h2><button class="modal-close" id="reset-pw-close">×</button></div>
+  <div class="modal-body">
+    <p style="font-size:.875rem;color:var(--text-secondary);">Set a new password for <strong id="reset-pw-username"></strong>.</p>
+    <div class="form-group"><label>New Password (min 8 chars)</label><input id="reset-pw-new" type="password" autocomplete="new-password"/></div>
+    <div id="reset-pw-error" style="color:var(--color-danger);font-size:.82rem;display:none;"></div>
+  </div>
+  <div class="modal-footer"><button class="btn btn-secondary" id="reset-pw-cancel">Cancel</button><button class="btn btn-primary" id="reset-pw-save">Reset Password</button></div>
+</dialog>
 
-    <!-- ------------------------------------------------------------------ -->
-    <!-- User Management                                                       -->
-    <!-- ------------------------------------------------------------------ -->
-    <div class="section">
-        <div class="section-header">
-            <h2>User Management</h2>
-            <span id="user-count" style="font-size:0.85rem;color:#7f8c8d;"></span>
-        </div>
-        <div id="user-alert" class="alert" style="display:none;"></div>
-        <table id="userTable">
-            <thead>
-                <tr>
-                    <th>ID</th>
-                    <th>Username</th>
-                    <th>Email</th>
-                    <th>Role</th>
-                    <th>Status</th>
-                    <th>Last Login</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody></tbody>
-        </table>
+<!-- Change Own Password Modal -->
+<dialog id="change-pw-modal">
+  <div class="modal-header"><h2>Change Password</h2><button class="modal-close" id="change-pw-close">×</button></div>
+  <div class="modal-body">
+    <div class="form-group"><label>Current Password</label><input id="change-pw-current" type="password" autocomplete="current-password"/></div>
+    <div class="form-group"><label>New Password (min 8 chars)</label><input id="change-pw-new" type="password" autocomplete="new-password"/></div>
+    <div class="form-group"><label>Confirm New Password</label><input id="change-pw-confirm" type="password" autocomplete="new-password"/></div>
+    <div id="change-pw-error" style="color:var(--color-danger);font-size:.82rem;display:none;"></div>
+  </div>
+  <div class="modal-footer"><button class="btn btn-secondary" id="change-pw-cancel">Cancel</button><button class="btn btn-primary" id="change-pw-save">Update Password</button></div>
+</dialog>
+
+<!-- Keyboard Shortcuts Overlay -->
+<div id="shortcuts-overlay">
+  <div class="shortcuts-box">
+    <h2>⌨️ Keyboard Shortcuts</h2>
+    <div class="shortcut-grid">
+      <div class="shortcut-row"><span>Toggle Dark Mode</span><span class="key">D</span></div>
+      <div class="shortcut-row"><span>Close / Escape</span><span class="key">Esc</span></div>
+      <div class="shortcut-row"><span>This Help</span><span class="key">?</span></div>
     </div>
-
-    <!-- ------------------------------------------------------------------ -->
-    <!-- Invite Users                                                          -->
-    <!-- ------------------------------------------------------------------ -->
-    <div class="section">
-        <div class="section-header">
-            <h2>Invite Users</h2>
-        </div>
-        <div id="invite-alert" class="alert" style="display:none;"></div>
-        <form class="form-inline" id="inviteForm">
-            <input type="email" name="email" placeholder="user@example.com" required style="min-width:260px;">
-            <button type="submit" class="btn btn-primary">Send Invite</button>
-        </form>
-
-        <h3 style="margin-top:1.5rem;margin-bottom:0.75rem;font-size:0.95rem;">Pending Invites</h3>
-        <table id="inviteTable">
-            <thead>
-                <tr>
-                    <th>Email</th>
-                    <th>Invited By</th>
-                    <th>Expires</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody></tbody>
-        </table>
-    </div>
-
-    <!-- ------------------------------------------------------------------ -->
-    <!-- Audit Log                                                             -->
-    <!-- ------------------------------------------------------------------ -->
-    <div class="section">
-        <div class="section-header">
-            <h2>Audit Log</h2>
-            <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
-                <select id="purgeSelect" class="form-control" style="width:auto;padding:0.3rem 0.5rem;font-size:0.8rem;">
-                    <option value="7">Older than 7 days</option>
-                    <option value="30" selected>Older than 30 days</option>
-                    <option value="60">Older than 60 days</option>
-                    <option value="90">Older than 90 days</option>
-                </select>
-                <button class="btn btn-warning" id="purgeLogsBtn" style="font-size:0.8rem;padding:0.3rem 0.7rem;">Purge Old</button>
-                <button class="btn btn-danger" id="clearLogsBtn" style="font-size:0.8rem;padding:0.3rem 0.7rem;">Clear All</button>
-                <div class="pagination" style="margin-left:1rem;">
-                    <button class="btn btn-secondary" id="auditPrev" disabled>← Prev</button>
-                    <span id="auditPage" style="font-size:0.85rem;"></span>
-                    <button class="btn btn-secondary" id="auditNext">Next →</button>
-                </div>
-            </div>
-        </div>
-        <div id="audit-alert" class="alert" style="display:none;"></div>
-        <table id="auditTable">
-            <thead>
-                <tr>
-                    <th>Action</th>
-                    <th>User</th>
-                    <th>IP Address</th>
-                    <th>Details</th>
-                    <th>Timestamp</th>
-                </tr>
-            </thead>
-            <tbody></tbody>
-        </table>
-    </div>
-
+    <button class="btn btn-secondary w-full" style="margin-top:1.2rem;" id="close-shortcuts-btn">Close</button>
+  </div>
 </div>
+
+<div id="toast-container"></div>
 
 <script>
-// ============================================================================
-// State
-// ============================================================================
-let currentUser  = null;
-let auditOffset  = 0;
-const AUDIT_LIMIT = 50;
+'use strict';
+let currentUser=null,allUsers=[],resetTargetId=null;
+let auditPage=1,auditTotalPages=1;
 
-// ============================================================================
-// API helper
-// ============================================================================
-async function api(method, path, body) {
-    const opts = { method, credentials: 'include', headers: { 'Content-Type': 'application/json' } };
-    if (body !== undefined) opts.body = JSON.stringify(body);
+// Theme
+function applyTheme(dark){document.documentElement.classList.toggle('dark',dark);document.getElementById('theme-toggle-btn').textContent=dark?'☀️':'🌙';localStorage.setItem('theme',dark?'dark':'light')}
+(function(){const s=localStorage.getItem('theme'),p=window.matchMedia('(prefers-color-scheme: dark)').matches;applyTheme(s?s==='dark':p)})();
+document.getElementById('theme-toggle-btn').addEventListener('click',()=>applyTheme(!document.documentElement.classList.contains('dark')));
 
-    const res  = await fetch(path, opts);
-    const data = await res.json().catch(() => ({}));
+// Toast
+function toast(msg,type='info'){const el=document.createElement('div');el.className=`toast ${type}`;el.textContent=msg;document.getElementById('toast-container').appendChild(el);setTimeout(()=>el.remove(),3500)}
 
-    if (res.status === 401) { window.location.href = '/'; return null; }
-    if (res.status === 403) { showAccessDenied(); return null; }
-    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-    return data;
+// API
+async function api(method,url,body){
+  const opts={method,credentials:'include',headers:{'Content-Type':'application/json'}};
+  if(body!==undefined)opts.body=JSON.stringify(body);
+  const res=await fetch(url,opts);
+  if(res.status===401){window.location.href='/';return null}
+  if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e.error||`HTTP ${res.status}`)}
+  if(res.status===204)return null;
+  return res.json();
 }
 
-function showAccessDenied() {
-    document.getElementById('access-denied').style.display = 'block';
-    document.getElementById('admin-content').style.display = 'none';
+function esc(s){if(s==null)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+function fmtDate(ts){if(!ts)return'—';return new Date(ts).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}
+function ago(ts){if(!ts)return'';const d=Date.now()-new Date(ts).getTime(),s=Math.floor(d/1000);if(s<60)return'just now';if(s<3600)return`${Math.floor(s/60)}m ago`;if(s<86400)return`${Math.floor(s/3600)}h ago`;return`${Math.floor(s/86400)}d ago`}
+
+// Tabs
+document.querySelectorAll('.tab-btn').forEach(btn=>btn.addEventListener('click',()=>{
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.tab-pane').forEach(p=>p.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById(`tab-${btn.dataset.tab}`).classList.add('active');
+  if(btn.dataset.tab==='users')loadUsers();
+  if(btn.dataset.tab==='invites')loadInvites();
+  if(btn.dataset.tab==='labels')loadLabels();
+  if(btn.dataset.tab==='audit'){auditPage=1;loadAuditLog()}
+}));
+
+// Load Stats
+async function loadStats(){
+  try{
+    const [users,invites,audit]=await Promise.all([api('GET','/api/admin/users'),api('GET','/api/admin/invites'),api('GET','/api/admin/audit-log?page=1&limit=1')]);
+    if(users){
+      document.getElementById('stat-users').textContent=users.length;
+      document.getElementById('stat-active').textContent=users.filter(u=>u.is_active).length;
+    }
+    if(invites)document.getElementById('stat-invites').textContent=invites.filter(i=>!i.used_at&&new Date(i.expires_at)>new Date()).length;
+    if(audit)document.getElementById('stat-logs').textContent=audit.total||0;
+    // Cards count from columns
+    const cols=await api('GET','/api/columns');
+    if(cols){const cards=await api('GET','/api/cards');if(cards)document.getElementById('stat-cards').textContent=cards.length}
+  }catch(e){console.error('Stats error',e)}
 }
 
-function showAlert(containerId, message, type = 'error') {
-    const el = document.getElementById(containerId);
-    el.textContent   = message;
-    el.className     = `alert alert-${type}`;
-    el.style.display = 'block';
-    setTimeout(() => { el.style.display = 'none'; }, 5000);
-}
-
-// ============================================================================
-// Bootstrap
-// ============================================================================
-(async () => {
-    const me = await fetch('/api/auth/me', { credentials: 'include' });
-    if (!me.ok) { window.location.href = '/'; return; }
-
-    currentUser = await me.json();
-
-    if (currentUser.role !== 'admin') { showAccessDenied(); return; }
-
-    document.getElementById('admin-user-badge').textContent = currentUser.username;
-    document.getElementById('admin-content').style.display = 'block';
-
-    await Promise.all([loadUsers(), loadInvites(), loadAuditLog()]);
-})();
-
-// ============================================================================
-// Logout
-// ============================================================================
-document.getElementById('logoutBtn').addEventListener('click', async () => {
-    await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }).catch(() => {});
-    window.location.href = '/';
-});
-
-// ============================================================================
 // Users
-// ============================================================================
-async function loadUsers() {
-    const users = await api('GET', '/api/admin/users');
-    if (!users) return;
-
-    document.getElementById('user-count').textContent = `${users.length} user${users.length !== 1 ? 's' : ''}`;
-
-    const tbody = document.querySelector('#userTable tbody');
-    if (users.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="empty-state">No users found.</td></tr>';
-        return;
-    }
-
-    tbody.innerHTML = users.map(u => `
-        <tr data-user-id="${u.id}">
-            <td>${u.id}</td>
-            <td><strong>${escapeHtml(u.username)}</strong></td>
-            <td>${escapeHtml(u.email)}</td>
-            <td>
-                <select class="role-select" data-user-id="${u.id}" ${u.id === currentUser.id ? 'disabled' : ''}>
-                    <option value="admin"  ${u.role === 'admin'  ? 'selected' : ''}>Admin</option>
-                    <option value="user"   ${u.role === 'user'   ? 'selected' : ''}>User</option>
-                    <option value="viewer" ${u.role === 'viewer' ? 'selected' : ''}>Viewer</option>
-                </select>
-            </td>
-            <td><span class="badge ${u.is_active ? 'active' : 'inactive'}">${u.is_active ? 'Active' : 'Inactive'}</span></td>
-            <td>${u.last_login ? new Date(u.last_login).toLocaleString() : '—'}</td>
-            <td>
-                ${u.id !== currentUser.id ? `
-                    <button class="btn btn-warning save-role-btn" data-user-id="${u.id}">Save Role</button>
-                    <button class="btn btn-primary reset-pw-btn" data-user-id="${u.id}" data-username="${escapeHtml(u.username)}">Reset PW</button>
-                    <button class="btn ${u.is_active ? 'btn-secondary' : 'btn-success'} toggle-status-btn"
-                            data-user-id="${u.id}" data-active="${u.is_active}">
-                        ${u.is_active ? 'Deactivate' : 'Activate'}
-                    </button>
-                    <button class="btn btn-danger delete-user-btn" data-user-id="${u.id}" data-username="${escapeHtml(u.username)}">
-                        Delete
-                    </button>
-                ` : '<em style="color:#7f8c8d;font-size:0.8rem;">(you)</em>'}
-            </td>
-        </tr>
-    `).join('');
-
-    // Wire up action buttons
-    tbody.querySelectorAll('.save-role-btn').forEach(btn => {
-        btn.addEventListener('click', async () => {
-            const userId = parseInt(btn.dataset.userId, 10);
-            const role   = tbody.querySelector(`.role-select[data-user-id="${userId}"]`).value;
-            try {
-                await api('PUT', `/api/admin/users/${userId}`, { role });
-                showAlert('user-alert', `Role updated successfully.`, 'success');
-                await loadUsers();
-            } catch (err) {
-                showAlert('user-alert', err.message);
-            }
-        });
+async function loadUsers(){
+  const search=document.getElementById('user-search').value.toLowerCase();
+  const roleFilter=document.getElementById('user-role-filter').value;
+  try{
+    const data=await api('GET','/api/admin/users');if(!data)return;allUsers=data;
+    const filtered=data.filter(u=>{
+      if(search&&!u.username.toLowerCase().includes(search)&&!u.email.toLowerCase().includes(search))return false;
+      if(roleFilter&&u.role!==roleFilter)return false;
+      return true;
     });
+    const tbody=document.getElementById('users-tbody');
+    if(!filtered.length){tbody.innerHTML=`<tr><td colspan="6" class="empty-state">No users found.</td></tr>`;return}
+    tbody.innerHTML=filtered.map(u=>`
+      <tr>
+        <td><strong>${esc(u.username)}</strong>${u.id===currentUser?.id?` <span class="badge badge-minimal" style="font-size:.65rem;">you</span>`:''}</td>
+        <td>${esc(u.email)}</td>
+        <td><span class="badge badge-${u.role}">${esc(u.role)}</span></td>
+        <td><span class="badge badge-${u.is_active?'active':'inactive'}">${u.is_active?'Active':'Inactive'}</span></td>
+        <td>${fmtDate(u.created_at)}</td>
+        <td>
+          <div class="actions-cell">
+            <select class="role-select" data-uid="${u.id}" style="width:auto;padding:.25rem .5rem;font-size:.78rem;">
+              <option value="admin" ${u.role==='admin'?'selected':''}>Admin</option>
+              <option value="user" ${u.role==='user'?'selected':''}>User</option>
+              <option value="viewer" ${u.role==='viewer'?'selected':''}>Viewer</option>
+            </select>
+            <button class="btn btn-primary btn-sm save-role-btn" data-uid="${u.id}">Save</button>
+            <button class="btn btn-secondary btn-sm reset-pw-btn" data-uid="${u.id}" data-uname="${esc(u.username)}">Reset PW</button>
+            <button class="btn ${u.is_active?'btn-warning':'btn-success'} btn-sm toggle-active-btn" data-uid="${u.id}" data-active="${u.is_active}">${u.is_active?'Deactivate':'Activate'}</button>
+            ${u.id!==currentUser?.id?`<button class="btn btn-danger btn-sm delete-user-btn" data-uid="${u.id}" data-uname="${esc(u.username)}">Delete</button>`:''}
+          </div>
+        </td>
+      </tr>`).join('');
 
-    tbody.querySelectorAll('.toggle-status-btn').forEach(btn => {
-        btn.addEventListener('click', async () => {
-            const userId   = parseInt(btn.dataset.userId, 10);
-            const isActive = btn.dataset.active === 'true';
-            if (!confirm(`${isActive ? 'Deactivate' : 'Activate'} this user?`)) return;
-            try {
-                await api('PUT', `/api/admin/users/${userId}`, { is_active: !isActive });
-                showAlert('user-alert', `User ${isActive ? 'deactivated' : 'activated'}.`, 'success');
-                await loadUsers();
-            } catch (err) {
-                showAlert('user-alert', err.message);
-            }
-        });
-    });
-
-    tbody.querySelectorAll('.delete-user-btn').forEach(btn => {
-        btn.addEventListener('click', async () => {
-            const userId   = parseInt(btn.dataset.userId, 10);
-            const username = btn.dataset.username;
-            if (!confirm(`Permanently delete user "${username}"? This cannot be undone.`)) return;
-            try {
-                await api('DELETE', `/api/admin/users/${userId}`);
-                showAlert('user-alert', `User "${username}" deleted.`, 'success');
-                await loadUsers();
-            } catch (err) {
-                showAlert('user-alert', err.message);
-            }
-        });
-    });
-
-    // Reset Password buttons
-    tbody.querySelectorAll('.reset-pw-btn').forEach(btn => {
-        btn.addEventListener('click', async () => {
-            const userId   = parseInt(btn.dataset.userId, 10);
-            const username = btn.dataset.username;
-            const newPw    = prompt(`Enter a new password for user "${username}" (min 8 characters):`);
-            if (!newPw) return;
-            if (newPw.length < 8) {
-                showAlert('user-alert', 'Password must be at least 8 characters.');
-                return;
-            }
-            try {
-                await api('POST', `/api/admin/users/${userId}/reset-password`, { new_password: newPw });
-                showAlert('user-alert', `Password reset successfully for "${username}".`, 'success');
-            } catch (err) {
-                showAlert('user-alert', err.message);
-            }
-        });
-    });
+    tbody.querySelectorAll('.save-role-btn').forEach(btn=>btn.addEventListener('click',async()=>{
+      const sel=tbody.querySelector(`.role-select[data-uid="${btn.dataset.uid}"]`);
+      try{await api('PATCH',`/api/admin/users/${btn.dataset.uid}/role`,{role:sel.value});toast('Role updated','success');await loadUsers();await loadStats()}
+      catch(err){toast(err.message,'error')}
+    }));
+    tbody.querySelectorAll('.reset-pw-btn').forEach(btn=>btn.addEventListener('click',()=>{
+      resetTargetId=btn.dataset.uid;document.getElementById('reset-pw-username').textContent=btn.dataset.uname;
+      document.getElementById('reset-pw-new').value='';document.getElementById('reset-pw-error').style.display='none';
+      document.getElementById('reset-pw-modal').showModal();
+    }));
+    tbody.querySelectorAll('.toggle-active-btn').forEach(btn=>btn.addEventListener('click',async()=>{
+      const active=btn.dataset.active==='true';
+      try{await api('PATCH',`/api/admin/users/${btn.dataset.uid}/active`,{is_active:!active});toast(`User ${active?'deactivated':'activated'}`,'success');await loadUsers();await loadStats()}
+      catch(err){toast(err.message,'error')}
+    }));
+    tbody.querySelectorAll('.delete-user-btn').forEach(btn=>btn.addEventListener('click',async()=>{
+      if(!confirm(`Permanently delete user "${btn.dataset.uname}"? This cannot be undone.`))return;
+      try{await api('DELETE',`/api/admin/users/${btn.dataset.uid}`);toast('User deleted','success');await loadUsers();await loadStats()}
+      catch(err){toast(err.message,'error')}
+    }));
+  }catch(err){toast(err.message,'error')}
 }
+document.getElementById('user-search').addEventListener('input',loadUsers);
+document.getElementById('user-role-filter').addEventListener('change',loadUsers);
 
-// ============================================================================
+// Reset Password
+document.getElementById('reset-pw-save').addEventListener('click',async()=>{
+  const pw=document.getElementById('reset-pw-new').value,errEl=document.getElementById('reset-pw-error');errEl.style.display='none';
+  if(pw.length<8){errEl.textContent='Password must be at least 8 characters.';errEl.style.display='block';return}
+  try{await api('POST',`/api/admin/users/${resetTargetId}/reset-password`,{newPassword:pw});document.getElementById('reset-pw-modal').close();toast('Password reset successfully','success')}
+  catch(err){errEl.textContent=err.message;errEl.style.display='block'}
+});
+document.getElementById('reset-pw-close').addEventListener('click',()=>document.getElementById('reset-pw-modal').close());
+document.getElementById('reset-pw-cancel').addEventListener('click',()=>document.getElementById('reset-pw-modal').close());
+
+// Change Own Password
+document.getElementById('change-pw-save').addEventListener('click',async()=>{
+  const cur=document.getElementById('change-pw-current').value,np=document.getElementById('change-pw-new').value,conf=document.getElementById('change-pw-confirm').value,errEl=document.getElementById('change-pw-error');
+  errEl.style.display='none';
+  if(np.length<8){errEl.textContent='New password must be at least 8 characters.';errEl.style.display='block';return}
+  if(np!==conf){errEl.textContent='Passwords do not match.';errEl.style.display='block';return}
+  try{await api('POST','/api/auth/change-password',{currentPassword:cur,newPassword:np});document.getElementById('change-pw-modal').close();toast('Password updated','success')}
+  catch(err){errEl.textContent=err.message;errEl.style.display='block'}
+});
+document.getElementById('change-pw-close').addEventListener('click',()=>document.getElementById('change-pw-modal').close());
+document.getElementById('change-pw-cancel').addEventListener('click',()=>document.getElementById('change-pw-modal').close());
+
 // Invites
-// ============================================================================
-async function loadInvites() {
-    const invites = await api('GET', '/api/admin/invites');
-    if (!invites) return;
-
-    const tbody = document.querySelector('#inviteTable tbody');
-    if (invites.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="4" class="empty-state">No pending invites.</td></tr>';
-        return;
-    }
-
-    tbody.innerHTML = invites.map(inv => `
-        <tr>
-            <td>${escapeHtml(inv.email)}</td>
-            <td>${escapeHtml(inv.invited_by_username || '—')}</td>
-            <td>${new Date(inv.expires_at).toLocaleString()}</td>
-            <td>
-                <button class="btn btn-danger revoke-invite-btn" data-token="${inv.token}">Revoke</button>
-            </td>
-        </tr>
-    `).join('');
-
-    tbody.querySelectorAll('.revoke-invite-btn').forEach(btn => {
-        btn.addEventListener('click', async () => {
-            if (!confirm('Revoke this invite?')) return;
-            try {
-                await api('DELETE', `/api/admin/invites/${btn.dataset.token}`);
-                showAlert('invite-alert', 'Invite revoked.', 'success');
-                await loadInvites();
-            } catch (err) {
-                showAlert('invite-alert', err.message);
-            }
-        });
-    });
+async function loadInvites(){
+  try{
+    const data=await api('GET','/api/admin/invites');if(!data)return;
+    const tbody=document.getElementById('invites-tbody');
+    const pending=data.filter(i=>!i.used_at&&new Date(i.expires_at)>new Date());
+    if(!pending.length){tbody.innerHTML=`<tr><td colspan="5" class="empty-state">No pending invites.</td></tr>`;return}
+    tbody.innerHTML=pending.map(i=>`
+      <tr>
+        <td>${esc(i.email)}</td>
+        <td><span class="badge badge-${i.role}">${esc(i.role)}</span></td>
+        <td>${ago(i.created_at)}</td>
+        <td>${fmtDate(i.expires_at)}</td>
+        <td><button class="btn btn-danger btn-sm revoke-invite-btn" data-iid="${i.id}">Revoke</button></td>
+      </tr>`).join('');
+    tbody.querySelectorAll('.revoke-invite-btn').forEach(btn=>btn.addEventListener('click',async()=>{
+      try{await api('DELETE',`/api/admin/invites/${btn.dataset.iid}`);toast('Invite revoked','success');await loadInvites();await loadStats()}
+      catch(err){toast(err.message,'error')}
+    }));
+  }catch(err){toast(err.message,'error')}
 }
+document.getElementById('send-invite-btn').addEventListener('click',async()=>{
+  const email=document.getElementById('invite-email').value.trim(),role=document.getElementById('invite-role').value;
+  if(!email){toast('Email is required','error');return}
+  try{await api('POST','/api/admin/invites',{email,role});document.getElementById('invite-email').value='';toast(`Invite sent to ${email}`,'success');await loadInvites();await loadStats()}
+  catch(err){toast(err.message,'error')}
+});
+document.getElementById('refresh-invites-btn').addEventListener('click',loadInvites);
 
-document.getElementById('inviteForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const email = e.target.email.value.trim();
-
-    try {
-        const result = await api('POST', '/api/admin/invites/send', { email });
-        if (!result) return;
-        showAlert('invite-alert', `Invite sent to ${result.sent_to}. Expires: ${new Date(result.expires_at).toLocaleString()}`, 'success');
-        e.target.reset();
-        await loadInvites();
-    } catch (err) {
-        showAlert('invite-alert', err.message);
-    }
+// Labels
+async function loadLabels(){
+  try{
+    const data=await api('GET','/api/cards/labels');if(!data)return;
+    const container=document.getElementById('labels-list');
+    if(!data.length){container.innerHTML='<div class="empty-state">No labels yet. Create one above.</div>';return}
+    container.innerHTML=`<div style="display:flex;flex-wrap:wrap;gap:.6rem;">${data.map(l=>`<div style="display:flex;align-items:center;gap:.4rem;background:var(--bg-surface-alt);border:1px solid var(--border-color);border-radius:var(--border-radius);padding:.4rem .75rem;"><span class="label-chip" style="background:${esc(l.color)}">${esc(l.name)}</span><span style="font-size:.72rem;color:var(--text-muted);">${l.usage_count||0} cards</span><button class="btn btn-danger btn-sm delete-label-btn" data-lid="${l.id}" style="padding:.15rem .4rem;font-size:.72rem;">×</button></div>`).join('')}</div>`;
+    container.querySelectorAll('.delete-label-btn').forEach(btn=>btn.addEventListener('click',async()=>{
+      if(!confirm('Delete this label? It will be removed from all cards.'))return;
+      try{await api('DELETE',`/api/cards/labels/${btn.dataset.lid}`);toast('Label deleted','success');await loadLabels()}
+      catch(err){toast(err.message,'error')}
+    }));
+  }catch(err){toast(err.message,'error')}
+}
+document.getElementById('create-label-btn').addEventListener('click',async()=>{
+  const name=document.getElementById('label-name').value.trim(),color=document.getElementById('label-color').value;
+  if(!name){toast('Label name is required','error');return}
+  try{await api('POST','/api/cards/labels',{name,color});document.getElementById('label-name').value='';toast('Label created','success');await loadLabels()}
+  catch(err){toast(err.message,'error')}
 });
 
-// ============================================================================
 // Audit Log
-// ============================================================================
-async function loadAuditLog() {
-    const data = await api('GET', `/api/admin/audit-log?limit=${AUDIT_LIMIT}&offset=${auditOffset}`);
-    if (!data) return;
-
-    const { entries, total } = data;
-    const page    = Math.floor(auditOffset / AUDIT_LIMIT) + 1;
-    const maxPage = Math.ceil(total / AUDIT_LIMIT);
-
-    document.getElementById('auditPage').textContent = `Page ${page} of ${maxPage} (${total} entries)`;
-    document.getElementById('auditPrev').disabled = auditOffset === 0;
-    document.getElementById('auditNext').disabled = auditOffset + AUDIT_LIMIT >= total;
-
-    const tbody = document.querySelector('#auditTable tbody');
-    if (entries.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No audit log entries.</td></tr>';
-        return;
-    }
-
-    tbody.innerHTML = entries.map(e => `
-        <tr>
-            <td><code>${escapeHtml(e.action)}</code></td>
-            <td>${escapeHtml(e.username || String(e.user_id || '—'))}</td>
-            <td>${escapeHtml(e.ip_address || '—')}</td>
-            <td><small style="color:#7f8c8d;">${escapeHtml(JSON.stringify(e.metadata || {}))}</small></td>
-            <td>${new Date(e.created_at).toLocaleString()}</td>
-        </tr>
-    `).join('');
+async function loadAuditLog(){
+  try{
+    const data=await api('GET',`/api/admin/audit-log?page=${auditPage}&limit=25`);if(!data)return;
+    auditTotalPages=data.total_pages||1;
+    document.getElementById('audit-page-info').textContent=`Page ${auditPage} of ${auditTotalPages} (${data.total||0} entries)`;
+    document.getElementById('audit-prev-btn').disabled=auditPage<=1;
+    document.getElementById('audit-next-btn').disabled=auditPage>=auditTotalPages;
+    const tbody=document.getElementById('audit-tbody');
+    if(!data.logs?.length){tbody.innerHTML=`<tr><td colspan="5" class="empty-state">No audit log entries.</td></tr>`;return}
+    tbody.innerHTML=data.logs.map(l=>`
+      <tr>
+        <td><span class="log-action">${esc(l.action)}</span></td>
+        <td>${esc(l.username||'—')}</td>
+        <td style="font-size:.75rem;color:var(--text-muted);">${esc(l.ip_address||'—')}</td>
+        <td style="font-size:.78rem;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(JSON.stringify(l.details))}">${l.details?esc(JSON.stringify(l.details)).slice(0,80):'—'}</td>
+        <td style="font-size:.75rem;color:var(--text-muted);white-space:nowrap;">${ago(l.created_at)}</td>
+      </tr>`).join('');
+    document.getElementById('stat-logs').textContent=data.total||0;
+  }catch(err){toast(err.message,'error')}
 }
-
-document.getElementById('auditPrev').addEventListener('click', async () => {
-    auditOffset = Math.max(0, auditOffset - AUDIT_LIMIT);
-    await loadAuditLog();
+document.getElementById('audit-prev-btn').addEventListener('click',()=>{if(auditPage>1){auditPage--;loadAuditLog()}});
+document.getElementById('audit-next-btn').addEventListener('click',()=>{if(auditPage<auditTotalPages){auditPage++;loadAuditLog()}});
+document.getElementById('purge-btn').addEventListener('click',async()=>{
+  const days=document.getElementById('purge-days').value;
+  if(!confirm(`Delete all audit log entries older than ${days} days?`))return;
+  try{const r=await api('DELETE',`/api/admin/audit-log/purge?days=${days}`);toast(`Purged ${r?.deleted||0} entries`,'success');auditPage=1;await loadAuditLog()}
+  catch(err){toast(err.message,'error')}
 });
-document.getElementById('auditNext').addEventListener('click', async () => {
-    auditOffset += AUDIT_LIMIT;
-    await loadAuditLog();
-});
-
-// ============================================================================
-// Audit Log — Clear & Purge
-// ============================================================================
-document.getElementById('clearLogsBtn').addEventListener('click', async () => {
-    if (!confirm('Are you sure you want to DELETE ALL audit log entries? This cannot be undone.')) return;
-    try {
-        const result = await api('DELETE', '/api/admin/audit-log');
-        if (!result) return;
-        showAlert('audit-alert', `Cleared ${result.entries_deleted} log entries.`, 'success');
-        auditOffset = 0;
-        await loadAuditLog();
-    } catch (err) {
-        showAlert('audit-alert', err.message);
-    }
+document.getElementById('clear-log-btn').addEventListener('click',async()=>{
+  if(!confirm('Delete ALL audit log entries? This cannot be undone.'))return;
+  try{await api('DELETE','/api/admin/audit-log');toast('Audit log cleared','success');auditPage=1;await loadAuditLog()}
+  catch(err){toast(err.message,'error')}
 });
 
-document.getElementById('purgeLogsBtn').addEventListener('click', async () => {
-    const days = document.getElementById('purgeSelect').value;
-    if (!confirm(`Delete all audit log entries older than ${days} days?`)) return;
-    try {
-        const result = await api('DELETE', `/api/admin/audit-log/older-than/${days}`);
-        if (!result) return;
-        showAlert('audit-alert', `Purged ${result.entries_deleted} entries older than ${days} days.`, 'success');
-        auditOffset = 0;
-        await loadAuditLog();
-    } catch (err) {
-        showAlert('audit-alert', err.message);
-    }
-});
+// Logout
+document.getElementById('logout-btn').addEventListener('click',async()=>{await api('POST','/api/auth/logout');window.location.href='/'});
 
-// ============================================================================
-// Utilities
-// ============================================================================
-function escapeHtml(text) {
-    const d = document.createElement('div');
-    d.textContent = String(text ?? '');
-    return d.innerHTML;
-}
+// Keyboard shortcuts
+document.addEventListener('keydown',e=>{
+  const inInput=['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName);
+  if(e.key==='Escape'){document.getElementById('shortcuts-overlay').classList.remove('open');document.querySelectorAll('dialog[open]').forEach(d=>d.close());return}
+  if(inInput)return;
+  if(e.key==='d'||e.key==='D')applyTheme(!document.documentElement.classList.contains('dark'));
+  if(e.key==='?')document.getElementById('shortcuts-overlay').classList.add('open');
+});
+document.getElementById('close-shortcuts-btn').addEventListener('click',()=>document.getElementById('shortcuts-overlay').classList.remove('open'));
+document.getElementById('shortcuts-overlay').addEventListener('click',e=>{if(e.target===document.getElementById('shortcuts-overlay'))document.getElementById('shortcuts-overlay').classList.remove('open')});
+
+// Bootstrap
+(async()=>{
+  try{
+    const me=await fetch('/api/auth/me',{credentials:'include'});
+    if(!me.ok){window.location.href='/';return}
+    currentUser=await me.json();
+    if(currentUser.role!=='admin'){document.getElementById('access-denied').style.display='flex';return}
+    document.getElementById('header-user').textContent=`Signed in as ${currentUser.username}`;
+    document.getElementById('admin-main').style.display='block';
+    await Promise.all([loadStats(),loadUsers()]);
+  }catch{window.location.href='/'}
+})();
 </script>
 </body>
 </html>

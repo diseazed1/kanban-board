@@ -144,6 +144,15 @@ function parseMentions(body) {
     return [...new Set(matches.map(m => m.slice(1).toLowerCase()))];
 }
 
+// Log to the board-wide activity feed
+const logBoardActivity = (db, userId, action, cardId, cardTitle, details = {}) => {
+    db.query(
+        `INSERT INTO board_activity (user_id, action, card_id, card_title, details)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [userId, action, cardId, cardTitle, JSON.stringify(details)]
+    ).catch((err) => console.error('Board activity write failed:', err));
+};
+
 // Format due date status for display
 function dueDateStatus(dueDate) {
     if (!dueDate) return null;
@@ -164,9 +173,19 @@ function dueDateStatus(dueDate) {
 // ---------------------------------------------------------------------------
 router.get('/', async (req, res) => {
     const { id: userId, role } = req.user;
+    const showArchived = req.query.archived === 'true';
 
     try {
+        const labelSubquery = `
+            COALESCE(
+                (SELECT json_agg(json_build_object('id', l.id, 'name', l.name, 'color', l.color))
+                 FROM card_labels cl JOIN labels l ON l.id = cl.label_id
+                 WHERE cl.card_id = c.id),
+                '[]'::json
+            ) AS labels`;
+
         let query, params;
+        const archiveFilter = showArchived ? 'c.is_archived = TRUE' : 'c.is_archived = FALSE';
 
         if (role === 'admin') {
             query  = `SELECT c.*,
@@ -174,10 +193,12 @@ router.get('/', async (req, res) => {
                              a.username AS assignee_username,
                              (SELECT COUNT(*) FROM card_subtasks WHERE card_id = c.id)::int AS subtask_total,
                              (SELECT COUNT(*) FROM card_subtasks WHERE card_id = c.id AND is_done = TRUE)::int AS subtask_done,
-                             (SELECT COUNT(*) FROM card_attachments WHERE card_id = c.id)::int AS attachment_count
+                             (SELECT COUNT(*) FROM card_attachments WHERE card_id = c.id)::int AS attachment_count,
+                             ${labelSubquery}
                       FROM cards c
                       LEFT JOIN users o ON o.id = c.owner_id
                       LEFT JOIN users a ON a.id = c.assignee_id
+                      WHERE ${archiveFilter}
                       ORDER BY c.column_id, c.position_in_column`;
             params = [];
         } else {
@@ -186,25 +207,19 @@ router.get('/', async (req, res) => {
                              a.username AS assignee_username,
                              (SELECT COUNT(*) FROM card_subtasks WHERE card_id = c.id)::int AS subtask_total,
                              (SELECT COUNT(*) FROM card_subtasks WHERE card_id = c.id AND is_done = TRUE)::int AS subtask_done,
-                             (SELECT COUNT(*) FROM card_attachments WHERE card_id = c.id)::int AS attachment_count
+                             (SELECT COUNT(*) FROM card_attachments WHERE card_id = c.id)::int AS attachment_count,
+                             ${labelSubquery}
                       FROM cards c
                       LEFT JOIN users o ON o.id = c.owner_id
                       LEFT JOIN users a ON a.id = c.assignee_id
-                      WHERE c.visibility = 'public'
-                         OR c.owner_id    = $1
-                         OR c.assignee_id = $1
+                      WHERE ${archiveFilter}
+                        AND (c.visibility = 'public' OR c.owner_id = $1 OR c.assignee_id = $1)
                       ORDER BY c.column_id, c.position_in_column`;
             params = [userId];
         }
 
         const result = await req.db.query(query, params);
-
-        // Annotate each card with due date status
-        const rows = result.rows.map(card => ({
-            ...card,
-            due_status: dueDateStatus(card.due_date),
-        }));
-
+        const rows = result.rows.map(card => ({ ...card, due_status: dueDateStatus(card.due_date) }));
         res.json(rows);
     } catch (err) {
         console.error('Card list error:', err);
@@ -306,6 +321,132 @@ router.delete('/views/:viewId', async (req, res) => {
     }
 });
 // ---------------------------------------------------------------------------
+// LABELS — must be before /:id
+// ---------------------------------------------------------------------------
+router.get('/labels', async (req, res) => {
+    try {
+        const result = await req.db.query('SELECT * FROM labels ORDER BY name ASC');
+        res.json(result.rows);
+    } catch (err) { res.status(500).json({ error: 'Server error fetching labels' }); }
+});
+router.post('/labels', async (req, res) => {
+    const { name, color } = req.body;
+    if (!name?.trim()) return res.status(400).json({ error: 'Label name is required' });
+    if (color && !/^#[0-9a-fA-F]{6}$/.test(color))
+        return res.status(400).json({ error: 'Color must be a valid hex code e.g. #3498db' });
+    try {
+        const result = await req.db.query(
+            `INSERT INTO labels (name, color, created_by) VALUES ($1, $2, $3)
+             ON CONFLICT (name) DO UPDATE SET color = EXCLUDED.color RETURNING *`,
+            [name.trim(), color || '#6c757d', req.user.id]
+        );
+        res.status(201).json(result.rows[0]);
+    } catch (err) { res.status(500).json({ error: 'Server error creating label' }); }
+});
+router.delete('/labels/:labelId', async (req, res) => {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+    try {
+        await req.db.query('DELETE FROM labels WHERE id = $1', [req.params.labelId]);
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: 'Server error deleting label' }); }
+});
+// ---------------------------------------------------------------------------
+// BOARD ACTIVITY FEED — must be before /:id
+// ---------------------------------------------------------------------------
+router.get('/feed', async (req, res) => {
+    const limit  = Math.min(parseInt(req.query.limit  || '50', 10), 200);
+    const offset = parseInt(req.query.offset || '0', 10);
+    try {
+        const result = await req.db.query(
+            `SELECT ba.*, u.username AS actor_username
+             FROM board_activity ba
+             LEFT JOIN users u ON u.id = ba.user_id
+             ORDER BY ba.created_at DESC
+             LIMIT $1 OFFSET $2`,
+            [limit, offset]
+        );
+        res.json(result.rows);
+    } catch (err) { res.status(500).json({ error: 'Server error fetching activity feed' }); }
+});
+// ---------------------------------------------------------------------------
+// ARCHIVE — must be before /:id
+// ---------------------------------------------------------------------------
+router.get('/archive', async (req, res) => {
+    const { id: userId, role } = req.user;
+    try {
+        const labelSubquery = `COALESCE(
+            (SELECT json_agg(json_build_object('id', l.id, 'name', l.name, 'color', l.color))
+             FROM card_labels cl JOIN labels l ON l.id = cl.label_id WHERE cl.card_id = c.id),
+            '[]'::json) AS labels`;
+        let query, params;
+        if (role === 'admin') {
+            query = `SELECT c.*, o.username AS owner_username, a.username AS assignee_username, ${labelSubquery}
+                     FROM cards c LEFT JOIN users o ON o.id = c.owner_id LEFT JOIN users a ON a.id = c.assignee_id
+                     WHERE c.is_archived = TRUE ORDER BY c.archived_at DESC`;
+            params = [];
+        } else {
+            query = `SELECT c.*, o.username AS owner_username, a.username AS assignee_username, ${labelSubquery}
+                     FROM cards c LEFT JOIN users o ON o.id = c.owner_id LEFT JOIN users a ON a.id = c.assignee_id
+                     WHERE c.is_archived = TRUE AND (c.visibility = 'public' OR c.owner_id = $1 OR c.assignee_id = $1)
+                     ORDER BY c.archived_at DESC`;
+            params = [userId];
+        }
+        const result = await req.db.query(query, params);
+        res.json(result.rows);
+    } catch (err) { res.status(500).json({ error: 'Server error fetching archive' }); }
+});
+// ---------------------------------------------------------------------------
+// CSV EXPORT — must be before /:id
+// ---------------------------------------------------------------------------
+router.get('/export/csv', async (req, res) => {
+    const { id: userId, role } = req.user;
+    const showArchived = req.query.archived === 'true';
+    try {
+        let query, params;
+        const archiveFilter = showArchived ? 'c.is_archived = TRUE' : 'c.is_archived = FALSE';
+        if (role === 'admin') {
+            query = `SELECT c.id, c.title, c.description, c.priority, c.visibility,
+                            col.name AS column_name, o.username AS owner, a.username AS assignee,
+                            c.due_date, c.is_archived, c.created_at, c.updated_at
+                     FROM cards c
+                     LEFT JOIN columns col ON col.id = c.column_id
+                     LEFT JOIN users o ON o.id = c.owner_id
+                     LEFT JOIN users a ON a.id = c.assignee_id
+                     WHERE ${archiveFilter}
+                     ORDER BY col.position, c.position_in_column`;
+            params = [];
+        } else {
+            query = `SELECT c.id, c.title, c.description, c.priority, c.visibility,
+                            col.name AS column_name, o.username AS owner, a.username AS assignee,
+                            c.due_date, c.is_archived, c.created_at, c.updated_at
+                     FROM cards c
+                     LEFT JOIN columns col ON col.id = c.column_id
+                     LEFT JOIN users o ON o.id = c.owner_id
+                     LEFT JOIN users a ON a.id = c.assignee_id
+                     WHERE ${archiveFilter}
+                       AND (c.visibility = 'public' OR c.owner_id = $1 OR c.assignee_id = $1)
+                     ORDER BY col.position, c.position_in_column`;
+            params = [userId];
+        }
+        const result = await req.db.query(query, params);
+        const headers = ['ID','Title','Description','Priority','Visibility','Column','Owner','Assignee','Due Date','Archived','Created','Updated'];
+        const escape = v => v == null ? '' : `"${String(v).replace(/"/g, '""')}"`;
+        const lines  = [headers.join(',')];
+        for (const r of result.rows) {
+            lines.push([
+                escape(r.id), escape(r.title), escape(r.description), escape(r.priority),
+                escape(r.visibility), escape(r.column_name), escape(r.owner), escape(r.assignee),
+                escape(r.due_date ? new Date(r.due_date).toISOString() : ''),
+                escape(r.is_archived), escape(new Date(r.created_at).toISOString()),
+                escape(new Date(r.updated_at).toISOString()),
+            ].join(','));
+        }
+        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader('Content-Disposition', `attachment; filename="kanban-export-${Date.now()}.csv"`);
+        res.send(lines.join('\n'));
+    } catch (err) { res.status(500).json({ error: 'Server error generating CSV' }); }
+});
+// ---------------------------------------------------------------------------
 // GET /api/cards/:id
 // ---------------------------------------------------------------------------
 router.get('/:id', async (req, res) => {
@@ -398,11 +539,19 @@ router.post('/', async (req, res) => {
 
         const newCard = result.rows[0];
 
-        logActivity(req.db, newCard.id, req.user.id, 'created', {
-            column: colCheck.rows[0].name,
-        });
-
+        logActivity(req.db, newCard.id, req.user.id, 'created', { column: colCheck.rows[0].name });
+        logBoardActivity(req.db, req.user.id, 'card_created', newCard.id, title, { column: colCheck.rows[0].name });
         audit(req.db, 'card_create', req.user.id, req.ip, { card_id: newCard.id, title });
+
+        // Apply labels if provided
+        if (Array.isArray(req.body.label_ids) && req.body.label_ids.length > 0) {
+            for (const lid of req.body.label_ids) {
+                await req.db.query(
+                    'INSERT INTO card_labels (card_id, label_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+                    [newCard.id, lid]
+                );
+            }
+        }
 
         // Notify assignee if assigned at creation
         if (assignee_id && assignee_id !== req.user.id) {
@@ -714,6 +863,92 @@ router.delete('/:id', async (req, res) => {
     } catch (err) {
         console.error('Card delete error:', err);
         res.status(500).json({ error: 'Server error deleting card' });
+    }
+});
+
+// ---------------------------------------------------------------------------
+// PATCH /api/cards/:id/archive  — soft-delete a card (owner or admin)
+// PATCH /api/cards/:id/unarchive — restore a card (owner or admin)
+// ---------------------------------------------------------------------------
+router.patch('/:id/archive', async (req, res) => {
+    const { id: userId, role } = req.user;
+    try {
+        const existing = await req.db.query('SELECT owner_id, title, is_archived FROM cards WHERE id = $1', [req.params.id]);
+        const card = existing.rows[0];
+        if (!card) return res.status(404).json({ error: 'Card not found' });
+        if (role !== 'admin' && card.owner_id !== userId)
+            return res.status(403).json({ error: 'Only the card owner or an admin can archive this card' });
+        if (card.is_archived) return res.status(409).json({ error: 'Card is already archived' });
+
+        const result = await req.db.query(
+            `UPDATE cards SET is_archived = TRUE, archived_at = NOW(), archived_by = $1, updated_at = NOW()
+             WHERE id = $2 RETURNING *`,
+            [userId, req.params.id]
+        );
+        logActivity(req.db, req.params.id, userId, 'archived', { title: card.title });
+        logBoardActivity(req.db, userId, 'card_archived', req.params.id, card.title, {});
+        audit(req.db, 'card_archive', userId, req.ip, { card_id: req.params.id, title: card.title });
+        res.json(result.rows[0]);
+    } catch (err) {
+        console.error('Archive error:', err);
+        res.status(500).json({ error: 'Server error archiving card' });
+    }
+});
+
+router.patch('/:id/unarchive', async (req, res) => {
+    const { id: userId, role } = req.user;
+    try {
+        const existing = await req.db.query('SELECT owner_id, title, is_archived FROM cards WHERE id = $1', [req.params.id]);
+        const card = existing.rows[0];
+        if (!card) return res.status(404).json({ error: 'Card not found' });
+        if (role !== 'admin' && card.owner_id !== userId)
+            return res.status(403).json({ error: 'Only the card owner or an admin can unarchive this card' });
+        if (!card.is_archived) return res.status(409).json({ error: 'Card is not archived' });
+
+        const result = await req.db.query(
+            `UPDATE cards SET is_archived = FALSE, archived_at = NULL, archived_by = NULL, updated_at = NOW()
+             WHERE id = $2 RETURNING *`,
+            [userId, req.params.id]
+        );
+        logActivity(req.db, req.params.id, userId, 'unarchived', { title: card.title });
+        logBoardActivity(req.db, userId, 'card_unarchived', req.params.id, card.title, {});
+        res.json(result.rows[0]);
+    } catch (err) {
+        console.error('Unarchive error:', err);
+        res.status(500).json({ error: 'Server error unarchiving card' });
+    }
+});
+
+// ---------------------------------------------------------------------------
+// PATCH /api/cards/:id/labels  — set labels on a card (replaces all existing)
+// ---------------------------------------------------------------------------
+router.patch('/:id/labels', async (req, res) => {
+    const { id: userId, role } = req.user;
+    const { label_ids } = req.body;
+    if (!Array.isArray(label_ids)) return res.status(400).json({ error: 'label_ids must be an array' });
+    try {
+        const existing = await req.db.query('SELECT owner_id, title FROM cards WHERE id = $1', [req.params.id]);
+        const card = existing.rows[0];
+        if (!card) return res.status(404).json({ error: 'Card not found' });
+        if (role !== 'admin' && card.owner_id !== userId)
+            return res.status(403).json({ error: 'Only the card owner or an admin can update labels' });
+
+        await req.db.query('DELETE FROM card_labels WHERE card_id = $1', [req.params.id]);
+        for (const lid of label_ids) {
+            await req.db.query(
+                'INSERT INTO card_labels (card_id, label_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+                [req.params.id, lid]
+            );
+        }
+        logActivity(req.db, req.params.id, userId, 'labels_updated', { label_ids });
+        const labelsResult = await req.db.query(
+            `SELECT l.* FROM labels l JOIN card_labels cl ON cl.label_id = l.id WHERE cl.card_id = $1`,
+            [req.params.id]
+        );
+        res.json(labelsResult.rows);
+    } catch (err) {
+        console.error('Labels update error:', err);
+        res.status(500).json({ error: 'Server error updating labels' });
     }
 });
 

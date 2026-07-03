@@ -69,6 +69,18 @@ CREATE TABLE IF NOT EXISTS columns (
 );
 
 -- ---------------------------------------------------------------------------
+-- Labels / Tags  (custom colored labels that can be applied to cards)
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS labels (
+    id          SERIAL       PRIMARY KEY,
+    name        VARCHAR(50)  NOT NULL,
+    color       VARCHAR(7)   NOT NULL DEFAULT '#6c757d',  -- hex color code
+    created_by  INT          REFERENCES users(id) ON DELETE SET NULL,
+    created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    UNIQUE(name)
+);
+
+-- ---------------------------------------------------------------------------
 -- Cards  (tasks / work items)
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS cards (
@@ -85,8 +97,21 @@ CREATE TABLE IF NOT EXISTS cards (
     visibility        visibility   NOT NULL DEFAULT 'public',
     -- Due date support
     due_date          TIMESTAMPTZ  DEFAULT NULL,
+    -- Soft delete / archiving
+    is_archived       BOOLEAN      NOT NULL DEFAULT FALSE,
+    archived_at       TIMESTAMPTZ  DEFAULT NULL,
+    archived_by       INT          REFERENCES users(id) ON DELETE SET NULL,
     created_at        TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     updated_at        TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+-- ---------------------------------------------------------------------------
+-- Card ↔ Label  (many-to-many join table)
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS card_labels (
+    card_id     UUID         NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+    label_id    INT          NOT NULL REFERENCES labels(id) ON DELETE CASCADE,
+    PRIMARY KEY (card_id, label_id)
 );
 
 -- ---------------------------------------------------------------------------
@@ -166,7 +191,22 @@ CREATE TABLE IF NOT EXISTS card_activity (
     action      VARCHAR(50)  NOT NULL,
     -- e.g. 'created', 'moved', 'edited', 'priority_changed',
     --      'visibility_changed', 'assigned', 'comment_added',
-    --      'due_date_set', 'subtask_added', 'file_attached'
+    --      'due_date_set', 'subtask_added', 'file_attached',
+    --      'archived', 'unarchived', 'label_added', 'label_removed'
+    details     JSONB        NOT NULL DEFAULT '{}',
+    created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+-- ---------------------------------------------------------------------------
+-- Board activity feed  (team-wide real-time activity stream)
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS board_activity (
+    id          SERIAL       PRIMARY KEY,
+    user_id     INT          REFERENCES users(id) ON DELETE SET NULL,
+    action      VARCHAR(50)  NOT NULL,
+    -- e.g. 'card_created', 'card_moved', 'card_archived', 'comment_added'
+    card_id     UUID         REFERENCES cards(id) ON DELETE CASCADE,
+    card_title  VARCHAR(200),                    -- snapshot at time of action
     details     JSONB        NOT NULL DEFAULT '{}',
     created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
@@ -191,6 +231,9 @@ CREATE INDEX IF NOT EXISTS idx_cards_owner        ON cards(owner_id);
 CREATE INDEX IF NOT EXISTS idx_cards_assignee     ON cards(assignee_id);
 CREATE INDEX IF NOT EXISTS idx_cards_visibility   ON cards(visibility);
 CREATE INDEX IF NOT EXISTS idx_cards_due_date     ON cards(due_date) WHERE due_date IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_cards_archived     ON cards(is_archived);
+CREATE INDEX IF NOT EXISTS idx_card_labels_card   ON card_labels(card_id);
+CREATE INDEX IF NOT EXISTS idx_card_labels_label  ON card_labels(label_id);
 CREATE INDEX IF NOT EXISTS idx_subtasks_card      ON card_subtasks(card_id);
 CREATE INDEX IF NOT EXISTS idx_attachments_card   ON card_attachments(card_id);
 CREATE INDEX IF NOT EXISTS idx_comments_card      ON card_comments(card_id);
@@ -199,6 +242,7 @@ CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, is_r
 CREATE INDEX IF NOT EXISTS idx_saved_views_user   ON saved_views(user_id);
 CREATE INDEX IF NOT EXISTS idx_activity_card      ON card_activity(card_id);
 CREATE INDEX IF NOT EXISTS idx_activity_created   ON card_activity(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_board_activity     ON board_activity(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_audit_user         ON audit_log(user_id);
 CREATE INDEX IF NOT EXISTS idx_audit_created      ON audit_log(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_invites_used       ON invites(used);
