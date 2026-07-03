@@ -31,6 +31,7 @@ COPY public/           ./public/
 COPY schema.sql        ./
 COPY columns_default.sql ./
 COPY seed_admin.js     ./
+COPY migrations/       ./migrations/
 
 # Non-root user for security
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
