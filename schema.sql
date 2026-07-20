@@ -152,6 +152,66 @@ CREATE INDEX IF NOT EXISTS idx_card_tag_map_card  ON card_tag_map(card_id);
 CREATE INDEX IF NOT EXISTS idx_card_tag_map_tag   ON card_tag_map(tag_id);
 
 -- ---------------------------------------------------------------------------
+-- Card subtasks / checklist items
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS card_subtasks (
+    id              SERIAL       PRIMARY KEY,
+    card_id         UUID         NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+    title           VARCHAR(200) NOT NULL,
+    completed       BOOLEAN      NOT NULL DEFAULT FALSE,
+    position        INT          NOT NULL DEFAULT 0,
+    created_by      INT          REFERENCES users(id) ON DELETE SET NULL,
+    completed_by    INT          REFERENCES users(id) ON DELETE SET NULL,
+    created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_subtasks_card   ON card_subtasks(card_id);
+CREATE INDEX IF NOT EXISTS idx_subtasks_pos     ON card_subtasks(card_id, position);
+
+-- ---------------------------------------------------------------------------
+-- Webhook integrations (outbound HTTP callbacks on card events)
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS webhooks (
+    id              SERIAL       PRIMARY KEY,
+    name            VARCHAR(100) NOT NULL,
+    url             TEXT         NOT NULL,
+    secret          VARCHAR(255) DEFAULT NULL,
+    events          TEXT[]       NOT NULL,
+    active          BOOLEAN      NOT NULL DEFAULT TRUE,
+    created_by      INT          REFERENCES users(id) ON DELETE SET NULL,
+    last_response_code INT        DEFAULT NULL,
+    last_triggered   TIMESTAMPTZ  DEFAULT NULL,
+    created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+-- ---------------------------------------------------------------------------
+-- Notification preferences per user (email digest opt-in)
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS notification_prefs (
+    id              SERIAL       PRIMARY KEY,
+    user_id         INT          NOT NULL REFERENCES users(id) ON DELETE CASCADE UNIQUE,
+    card_created    BOOLEAN      NOT NULL DEFAULT FALSE,
+    card_updated    BOOLEAN      NOT NULL DEFAULT FALSE,
+    card_assigned   BOOLEAN      NOT NULL DEFAULT TRUE,
+    card_moved      BOOLEAN      NOT NULL DEFAULT FALSE,
+    card_due_reminder BOOLEAN    NOT NULL DEFAULT TRUE,
+    comment_added   BOOLEAN      NOT NULL DEFAULT FALSE,
+    digest_enabled  BOOLEAN      NOT NULL DEFAULT TRUE,
+    digest_frequency VARCHAR(20) NOT NULL DEFAULT 'realtime',
+    created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+-- ---------------------------------------------------------------------------
+-- Structured change tracking columns (audit-compliance)
+-- Extends existing card_activity with explicit before/after snapshots.
+-- ---------------------------------------------------------------------------
+ALTER TABLE card_activity ADD COLUMN IF NOT EXISTS field_changed VARCHAR(100);
+ALTER TABLE card_activity ADD COLUMN IF NOT EXISTS old_value JSONB;
+ALTER TABLE card_activity ADD COLUMN IF NOT EXISTS new_value JSONB;
+-- ---------------------------------------------------------------------------
 -- Indexes
 -- ---------------------------------------------------------------------------
 CREATE INDEX IF NOT EXISTS idx_cards_column       ON cards(column_id);

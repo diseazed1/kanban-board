@@ -2202,7 +2202,7 @@ const sendNotificationEmail = async (db, toEmail, subject, htmlContent) => {
         sgMail.setApiKey(sgKey);
         await sgMail.send({
             to: toEmail,
-            from: process.env.SENDGRID_FROM_EMAIL || 'noreply@kanban.local',
+            from: process.env.FROM_EMAIL || 'noreply@kanban.local',
             subject,
             html: htmlContent,
         });

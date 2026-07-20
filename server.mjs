@@ -17,7 +17,7 @@ import path         from 'path';
 import fs           from 'fs/promises';
 
 import { authenticate, requireRole } from './middleware/auth.js';
-import authRoutes   from './routes/auth.js';
+import authRoutes, { loginLimiter }   from './routes/auth.js';
 import columnRoutes from './routes/columns.js';
 import cardRoutes   from './routes/cards.js';
 import adminRoutes  from './routes/admin.js';

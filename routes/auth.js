@@ -327,4 +327,5 @@ router.post('/change-password', authenticate, async (req, res) => {
     }
 });
 
+export { loginLimiter };
 export default router;
