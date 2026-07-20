@@ -324,12 +324,26 @@ router.post('/', async (req, res) => {
 
         const newCard = result.rows[0];
 
-        // Log activity
+        // Log activity with structured diff
         logActivity(req.db, newCard.id, req.user.id, 'created', {
             column: colCheck.rows[0].name,
         });
 
         audit(req.db, 'card_create', req.user.id, req.ip, { card_id: newCard.id, title });
+
+        // Dispatch webhook event (fire-and-forget)
+        dispatchWebhookEvent(req.db, 'card.created', {
+            event: 'card.created',
+            timestamp: new Date().toISOString(),
+            card: { id: newCard.id, title },
+            user_id: req.user.id,
+            column: colCheck.rows[0].name,
+        }).catch(() => {});
+
+        // Dispatch email notification (fire-and-forget)
+        notifyCardEvent(req.db, 'card.created', newCard.id, {
+            actorId: req.user.id,
+        }).catch(() => {});
 
         res.status(201).json(newCard);
     } catch (err) {
@@ -419,7 +433,8 @@ router.put('/:id', async (req, res) => {
 
         const updatedCard = result.rows[0];
 
-        // Log specific activity events
+        // Log specific activity events with structured before/after diff
+        const changedFields = [];
         if ('column_id' in updates && updates.column_id !== card.column_id) {
             // Get column names for the activity log
             const colNames = await req.db.query(
@@ -431,18 +446,52 @@ router.put('/:id', async (req, res) => {
                 from_column: colMap[card.column_id] || `Column ${card.column_id}`,
                 to_column:   colMap[updates.column_id] || `Column ${updates.column_id}`,
             });
+            // Structured diff
+            await req.db.query(
+                `UPDATE card_activity SET field_changed = 'column_id',
+                                         old_value = $1::jsonb,
+                                         new_value = $2::jsonb
+                 WHERE card_id = $3 AND action = 'moved'
+                   AND details->>'from_column' = $4
+                   AND created_at >= NOW() - INTERVAL '1 second'`,
+                [JSON.stringify(card.column_id), JSON.stringify(updates.column_id), card.id,
+                 colMap[card.column_id] || `Column ${card.column_id}`]
+            ).catch(() => {});
+            changedFields.push('column');
         }
         if ('priority' in updates && updates.priority !== card.priority) {
             logActivity(req.db, card.id, userId, 'priority_changed', {
                 from: card.priority,
                 to:   updates.priority,
             });
+            // Structured diff
+            await req.db.query(
+                `UPDATE card_activity SET field_changed = 'priority',
+                                         old_value = $1::jsonb,
+                                         new_value = $2::jsonb
+                 WHERE card_id = $3 AND action = 'priority_changed'
+                   AND details->>'from' = $4
+                   AND created_at >= NOW() - INTERVAL '1 second'`,
+                [JSON.stringify(card.priority), JSON.stringify(updates.priority), card.id, card.priority]
+            ).catch(() => {});
+            changedFields.push('priority');
         }
         if ('visibility' in updates && updates.visibility !== card.visibility) {
             logActivity(req.db, card.id, userId, 'visibility_changed', {
                 from: card.visibility,
                 to:   updates.visibility,
             });
+            // Structured diff
+            await req.db.query(
+                `UPDATE card_activity SET field_changed = 'visibility',
+                                         old_value = $1::jsonb,
+                                         new_value = $2::jsonb
+                 WHERE card_id = $3 AND action = 'visibility_changed'
+                   AND details->>'from' = $4
+                   AND created_at >= NOW() - INTERVAL '1 second'`,
+                [JSON.stringify(card.visibility), JSON.stringify(updates.visibility), card.id, card.visibility]
+            ).catch(() => {});
+            changedFields.push('visibility');
         }
         if ('title' in updates && updates.title !== card.title) {
             logActivity(req.db, card.id, userId, 'edited', {
@@ -450,11 +499,73 @@ router.put('/:id', async (req, res) => {
                 from:  card.title,
                 to:    updates.title,
             });
+            // Structured diff
+            await req.db.query(
+                `UPDATE card_activity SET field_changed = 'title',
+                                         old_value = $1::jsonb,
+                                         new_value = $2::jsonb
+                 WHERE card_id = $3 AND action = 'edited'
+                   AND details->>'from' = $4
+                   AND created_at >= NOW() - INTERVAL '1 second'`,
+                [JSON.stringify(card.title), JSON.stringify(updates.title), card.id, card.title]
+            ).catch(() => {});
+            changedFields.push('title');
         }
-        if ('assignee_id' in updates && updates.assignee_id !== card.assignee_id) {
+        if ('assignee_id' in updates && String(updates.assignee_id || '') !== String(card.assignee_id || '')) {
             logActivity(req.db, card.id, userId, 'assigned', {
-                assignee_id: updates.assignee_id,
+                from: card.assignee_id,
+                to:   resolvedAssigneeId,
             });
+            // Structured diff
+            await req.db.query(
+                `UPDATE card_activity SET field_changed = 'assignee_id',
+                                         old_value = $1::jsonb,
+                                         new_value = $2::jsonb
+                 WHERE card_id = $3 AND action = 'assigned'
+                   AND created_at >= NOW() - INTERVAL '1 second'`,
+                [JSON.stringify(card.assignee_id), JSON.stringify(resolvedAssigneeId), card.id]
+            ).catch(() => {});
+            changedFields.push('assignee');
+
+            // Email notification for assignee change
+            if (resolvedAssigneeId) {
+                notifyCardEvent(req.db, 'card.assigned', card.id, {
+                    actorId: userId,
+                    assignee_id: resolvedAssigneeId,
+                }).catch(() => {});
+            }
+        }
+        if ('due_date' in updates && String(updates.due_date || '') !== String(card.due_date || '')) {
+            logActivity(req.db, card.id, userId, 'edited', {
+                field: 'due_date',
+                from:  card.due_date,
+                to:    parsedDueDate,
+            });
+            await req.db.query(
+                `UPDATE card_activity SET field_changed = 'due_date',
+                                         old_value = $1::jsonb,
+                                         new_value = $2::jsonb
+                 WHERE card_id = $3 AND action = 'edited'
+                   AND details->>'field' = 'due_date'
+                   AND created_at >= NOW() - INTERVAL '1 second'`,
+                [JSON.stringify(card.due_date), JSON.stringify(parsedDueDate), card.id]
+            ).catch(() => {});
+        }
+
+        // Dispatch webhook event if anything changed meaningfully
+        if (changedFields.length > 0) {
+            dispatchWebhookEvent(req.db, 'card.updated', {
+                event: 'card.updated',
+                timestamp: new Date().toISOString(),
+                card: { id: updatedCard.id, title: updatedCard.title },
+                user_id: userId,
+                changed_fields: changedFields,
+            }).catch(() => {});
+
+            // Email notification for card updates
+            notifyCardEvent(req.db, 'card.updated', card.id, {
+                actorId: userId,
+            }).catch(() => {});
         }
 
         res.json(updatedCard);
@@ -618,6 +729,22 @@ router.patch('/:id/reorder', async (req, res) => {
                 from_column: colMap[oldColumnId] || `Column ${oldColumnId}`,
                 to_column:   colMap[newColumnId] || `Column ${newColumnId}`,
             });
+
+            // Dispatch webhook + email for move events
+            dispatchWebhookEvent(req.db, 'card.moved', {
+                event: 'card.moved',
+                timestamp: new Date().toISOString(),
+                card: { id: card.id },
+                user_id: userId,
+                from_column: colMap[oldColumnId] || `Column ${oldColumnId}`,
+                to_column:   colMap[newColumnId] || `Column ${newColumnId}`,
+            }).catch(() => {});
+
+            notifyCardEvent(req.db, 'card.moved', card.id, {
+                actorId: userId,
+                from_column: colMap[oldColumnId],
+                to_column:   colMap[newColumnId],
+            }).catch(() => {});
         }
 
         // Fetch the updated card
@@ -656,6 +783,14 @@ router.delete('/:id', async (req, res) => {
         await req.db.query('DELETE FROM cards WHERE id = $1', [req.params.id]);
 
         audit(req.db, 'card_delete', userId, req.ip, { card_id: req.params.id, title: card.title });
+
+        // Dispatch webhook for deletion
+        dispatchWebhookEvent(req.db, 'card.deleted', {
+            event: 'card.deleted',
+            timestamp: new Date().toISOString(),
+            card: { id: req.params.id, title: card.title },
+            user_id: userId,
+        }).catch(() => {});
 
         res.json({ success: true });
     } catch (err) {
@@ -732,6 +867,20 @@ router.post('/:id/comments', async (req, res) => {
         logActivity(req.db, req.params.id, userId, 'comment_added', {
             comment_id: comment.id,
         });
+
+        // Dispatch webhook + email for comments
+        dispatchWebhookEvent(req.db, 'comment.added', {
+            event: 'comment.added',
+            timestamp: new Date().toISOString(),
+            card_id: req.params.id,
+            comment_id: comment.id,
+            user_id: userId,
+            body: body.trim().substring(0, 500),
+        }).catch(() => {});
+
+        notifyCardEvent(req.db, 'comment.added', req.params.id, {
+            actorId: userId,
+        }).catch(() => {});
 
         res.status(201).json(comment);
     } catch (err) {
@@ -925,7 +1074,7 @@ router.delete('/:id/attachments/:aid', async (req, res) => {
 // ===========================================================================
 
 // ---------------------------------------------------------------------------
-// GET /api/cards/:id/activity
+// GET /api/cards/:id/activity  — card activity timeline (with structured diff)
 // ---------------------------------------------------------------------------
 router.get('/:id/activity', async (req, res) => {
     const { id: userId, role } = req.user;
@@ -939,13 +1088,23 @@ router.get('/:id/activity', async (req, res) => {
             return res.status(403).json({ error: 'Access denied' });
         }
 
+        // Return activity with structured before/after diff fields
         const result = await req.db.query(
-            `SELECT ca.*, u.username
+            `SELECT ca.id,
+                    ca.card_id,
+                    ca.user_id,
+                    ca.action,
+                    ca.details,
+                    ca.field_changed,
+                    ca.old_value,
+                    ca.new_value,
+                    ca.created_at,
+                    u.username
              FROM card_activity ca
              LEFT JOIN users u ON u.id = ca.user_id
              WHERE ca.card_id = $1
              ORDER BY ca.created_at DESC
-             LIMIT 50`,
+             LIMIT 100`,
             [req.params.id]
         );
 
@@ -1133,6 +1292,16 @@ router.patch('/bulk/move', async (req, res) => {
 
         audit(req.db, 'card_bulk_move', userId, req.ip, { card_ids, column_id });
 
+        // Dispatch webhook for bulk action
+        dispatchWebhookEvent(req.db, 'bulk.action', {
+            event: 'bulk.action',
+            action_type: 'move',
+            timestamp: new Date().toISOString(),
+            user_id: userId,
+            card_ids,
+            column_id,
+        }).catch(() => {});
+
         res.json({ success: true, moved: movedCards.length });
     } catch (err) {
         console.error('Bulk move error:', err);
@@ -1250,6 +1419,36 @@ router.delete('/bulk', async (req, res) => {
 // ===========================================================================
 
 // ---------------------------------------------------------------------------
+// GET /api/cards/:id/tags  — list tags on a specific card
+// (Must be placed before the generic :id/:param routes like tags/:tagId)
+// ===========================================================================
+router.get('/:id/tags', async (req, res) => {
+    const { id: userId, role } = req.user;
+
+    try {
+        // Verify card exists and user can access it
+        const cardResult = await req.db.query('SELECT * FROM cards WHERE id = $1', [req.params.id]);
+        const card = cardResult.rows[0];
+        if (!card) return res.status(404).json({ error: 'Card not found' });
+        if (!canView(card, userId, role)) {
+            return res.status(403).json({ error: 'Access denied' });
+        }
+
+        const result = await req.db.query(
+            `SELECT ct.* FROM card_tag_map ctm
+             JOIN card_tags ct ON ct.id = ctm.tag_id
+             WHERE ctm.card_id = $1 ORDER BY ct.name`,
+            [req.params.id]
+        );
+
+        res.json(result.rows);
+    } catch (err) {
+        console.error('Card tags fetch error:', err);
+        res.status(500).json({ error: 'Server error fetching card tags' });
+    }
+});
+
+// ---------------------------------------------------------------------------
 // GET /api/cards/tags  — list all distinct tags in use (alphabetical)
 // Note: must be registered BEFORE any :id parametric routes.
 // It is already placed before this block; the route '/tags' will match literally.
@@ -1326,6 +1525,15 @@ router.post('/:id/tags', async (req, res) => {
 
         logActivity(req.db, req.params.id, userId, 'tags_added', { tags: normalizedTags });
 
+        // Dispatch webhook for tag events
+        dispatchWebhookEvent(req.db, 'tag.added', {
+            event: 'tag.added',
+            timestamp: new Date().toISOString(),
+            card_id: req.params.id,
+            user_id: userId,
+            tags: normalizedTags,
+        }).catch(() => {});
+
         res.json({ success: true, tags: currentTags.rows });
     } catch (err) {
         console.error('Card add tags error:', err);
@@ -1366,10 +1574,808 @@ router.delete('/:id/tags/:tagId', async (req, res) => {
 
         logActivity(req.db, req.params.id, userId, 'tag_removed', { tag: removedTag.slug });
 
+        // Dispatch webhook for tag removal
+        dispatchWebhookEvent(req.db, 'tag.removed', {
+            event: 'tag.removed',
+            timestamp: new Date().toISOString(),
+            card_id: req.params.id,
+            user_id: userId,
+            tag: removedTag.slug,
+        }).catch(() => {});
+
         res.json({ success: true, removed_tag: removedTag });
     } catch (err) {
         console.error('Card remove tag error:', err);
         res.status(500).json({ error: 'Server error removing tag' });
+    }
+});
+
+// ===========================================================================
+// SUBTASKS / CHECKLIST ITEMS
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// GET /api/cards/:id/subtasks  — list subtasks for a card
+// ---------------------------------------------------------------------------
+router.get('/:id/subtasks', async (req, res) => {
+    const { id: userId, role } = req.user;
+
+    try {
+        // Verify card exists and user can access it
+        const cardResult = await req.db.query('SELECT * FROM cards WHERE id = $1', [req.params.id]);
+        const card = cardResult.rows[0];
+        if (!card) return res.status(404).json({ error: 'Card not found' });
+        if (!canView(card, userId, role)) {
+            return res.status(403).json({ error: 'Access denied' });
+        }
+
+        const result = await req.db.query(
+            `SELECT cs.*,
+                    cr.username AS created_by_username,
+                    cb.username AS completed_by_username
+             FROM card_subtasks cs
+             LEFT JOIN users cr ON cr.id = cs.created_by
+             LEFT JOIN users cb ON cb.id = cs.completed_by
+             WHERE cs.card_id = $1
+             ORDER BY cs.position ASC, cs.id ASC`,
+            [req.params.id]
+        );
+
+        res.json(result.rows);
+    } catch (err) {
+        console.error('Subtasks fetch error:', err);
+        res.status(500).json({ error: 'Server error fetching subtasks' });
+    }
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/cards/:id/subtasks  — create a subtask
+// Body: { title, position? }
+// ---------------------------------------------------------------------------
+router.post('/:id/subtasks', async (req, res) => {
+    const { id: userId, role } = req.user;
+    const { title, position } = req.body;
+
+    if (!title?.trim()) {
+        return res.status(400).json({ error: 'Subtask title is required' });
+    }
+
+    try {
+        // Verify card exists and user can access it
+        const cardResult = await req.db.query('SELECT * FROM cards WHERE id = $1', [req.params.id]);
+        const card = cardResult.rows[0];
+        if (!card) return res.status(404).json({ error: 'Card not found' });
+        if (!canView(card, userId, role)) {
+            return res.status(403).json({ error: 'Access denied' });
+        }
+
+        // Determine position — append at end if not provided
+        let pos = position;
+        if (pos === undefined || pos === null) {
+            const maxPos = await req.db.query(
+                'SELECT COALESCE(MAX(position), -1) + 1 AS next_pos FROM card_subtasks WHERE card_id = $1',
+                [req.params.id]
+            );
+            pos = maxPos.rows[0].next_pos;
+        }
+
+        const result = await req.db.query(
+            `INSERT INTO card_subtasks (card_id, title, position, created_by)
+             VALUES ($1, $2, $3, $4) RETURNING *`,
+            [req.params.id, title.trim(), pos, userId]
+        );
+
+        const subtask = result.rows[0];
+        logActivity(req.db, req.params.id, userId, 'subtask_added', {
+            subtask_id: subtask.id,
+            title: subtask.title,
+        });
+
+        res.status(201).json(subtask);
+    } catch (err) {
+        console.error('Subtask create error:', err);
+        res.status(500).json({ error: 'Server error creating subtask' });
+    }
+});
+
+// ---------------------------------------------------------------------------
+// PUT /api/cards/:id/subtasks/:subtaskId  — update a subtask (title/completed/position)
+// ---------------------------------------------------------------------------
+router.put('/:id/subtasks/:subtaskId', async (req, res) => {
+    const { id: userId, role } = req.user;
+
+    try {
+        // Verify card access
+        const cardResult = await req.db.query('SELECT * FROM cards WHERE id = $1', [req.params.id]);
+        const card = cardResult.rows[0];
+        if (!card) return res.status(404).json({ error: 'Card not found' });
+        if (!canView(card, userId, role)) {
+            return res.status(403).json({ error: 'Access denied' });
+        }
+
+        // Fetch existing subtask (snapshot for diff)
+        const subResult = await req.db.query(
+            'SELECT * FROM card_subtasks WHERE id = $1 AND card_id = $2',
+            [parseInt(req.params.subtaskId, 10), req.params.id]
+        );
+        const subtask = subResult.rows[0];
+        if (!subtask) return res.status(404).json({ error: 'Subtask not found' });
+
+        const updates = req.body;
+        const fields = [];
+        const values = [];
+        let idx = 1;
+
+        if ('title' in updates && updates.title?.trim()) {
+            fields.push(`title = $${idx++}`);
+            values.push(updates.title.trim());
+        }
+        if ('completed' in updates) {
+            const oldCompleted = subtask.completed;
+            const newCompleted = Boolean(updates.completed);
+            fields.push(`completed = $${idx++}`);
+            values.push(newCompleted);
+
+            // Log completion event with structured diff
+            logActivity(req.db, req.params.id, userId,
+                newCompleted ? 'subtask_completed' : 'subtask_unchecked',
+                {
+                    subtask_id: subtask.id,
+                    title: subtask.title,
+                }
+            );
+
+            // Structured before/after diff on the activity row
+            await req.db.query(
+                `UPDATE card_activity SET field_changed = 'completed',
+                                         old_value = $1::jsonb,
+                                         new_value = $2::jsonb
+                 WHERE card_id = $3 AND action IN ('subtask_completed', 'subtask_unchecked')
+                   AND details->>'subtask_id' = $4
+                   AND created_at >= NOW() - INTERVAL '1 second'`,
+                [JSON.stringify(oldCompleted), JSON.stringify(newCompleted), req.params.id, String(subtask.id)]
+            ).catch(() => {});
+        }
+        if ('position' in updates) {
+            fields.push(`position = $${idx++}`);
+            values.push(parseInt(updates.position, 10));
+        }
+
+        // Also track title changes with structured diff
+        if ('title' in updates && updates.title?.trim() && updates.title.trim() !== subtask.title) {
+            logActivity(req.db, req.params.id, userId, 'subtask_edited', {
+                subtask_id: subtask.id,
+                field: 'title',
+            });
+
+            // Defer structured diff to a follow-up query after insert
+        }
+
+        if (fields.length === 0) {
+            return res.status(400).json({ error: 'No valid fields provided for update' });
+        }
+
+        fields.push(`updated_at = NOW()`);
+        values.push(req.params.id);
+        values.push(parseInt(req.params.subtaskId, 10));
+
+        const result = await req.db.query(
+            `UPDATE card_subtasks SET ${fields.join(', ')} WHERE id = $${idx + 1} AND card_id = $${idx} RETURNING *`,
+            values
+        );
+
+        // Add structured diff for title changes
+        if ('title' in updates && updates.title?.trim() && updates.title.trim() !== subtask.title) {
+            await req.db.query(
+                `UPDATE card_activity SET field_changed = 'subtask_title',
+                                         old_value = $1::jsonb,
+                                         new_value = $2::jsonb
+                 WHERE card_id = $3 AND action = 'subtask_edited'
+                   AND details->>'subtask_id' = $4
+                   AND created_at >= NOW() - INTERVAL '1 second'`,
+                [JSON.stringify(subtask.title), JSON.stringify(updates.title.trim()), req.params.id, String(subtask.id)]
+            ).catch(() => {});
+        }
+
+        const updatedSubtask = result.rows[0];
+        res.json(updatedSubtask);
+    } catch (err) {
+        console.error('Subtask update error:', err);
+        res.status(500).json({ error: 'Server error updating subtask' });
+    }
+});
+
+// ---------------------------------------------------------------------------
+// DELETE /api/cards/:id/subtasks/:subtaskId  — remove a subtask
+// ---------------------------------------------------------------------------
+router.delete('/:id/subtasks/:subtaskId', async (req, res) => {
+    const { id: userId, role } = req.user;
+
+    try {
+        // Verify card access
+        const cardResult = await req.db.query('SELECT * FROM cards WHERE id = $1', [req.params.id]);
+        const card = cardResult.rows[0];
+        if (!card) return res.status(404).json({ error: 'Card not found' });
+        if (!canView(card, userId, role)) {
+            return res.status(403).json({ error: 'Access denied' });
+        }
+
+        const subResult = await req.db.query(
+            'SELECT * FROM card_subtasks WHERE id = $1 AND card_id = $2',
+            [parseInt(req.params.subtaskId, 10), req.params.id]
+        );
+        const subtask = subResult.rows[0];
+        if (!subtask) return res.status(404).json({ error: 'Subtask not found' });
+
+        await req.db.query('DELETE FROM card_subtasks WHERE id = $1', [parseInt(req.params.subtaskId, 10)]);
+
+        logActivity(req.db, req.params.id, userId, 'subtask_removed', {
+            subtask_id: subtask.id,
+            title: subtask.title,
+        });
+
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Subtask delete error:', err);
+        res.status(500).json({ error: 'Server error deleting subtask' });
+    }
+});
+
+// ===========================================================================
+// WEBHOOK INTEGRATIONS
+// ===========================================================================
+
+const crypto = await import('crypto');
+
+// Use native fetch (Node 18+) or fallback to node-fetch if available
+let globalFetch;
+try {
+    const nf = await import('node-fetch');
+    globalFetch = nf.default || nf.fetch;
+} catch (_) {
+    // Node.js v18+ has built-in globalThis.fetch
+    globalFetch = globalThis.fetch.bind(globalThis);
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/cards/webhooks  — list all active webhooks (admin + creators)
+// ---------------------------------------------------------------------------
+router.get('/webhooks', async (req, res) => {
+    const { id: userId, role } = req.user;
+
+    try {
+        let whereClause = 'TRUE';
+        const params = [];
+        if (role !== 'admin') {
+            whereClause = 'created_by = $1 OR active = FALSE';
+            params.push(userId);
+        }
+
+        const result = await req.db.query(
+            `SELECT * FROM webhooks WHERE ${whereClause} ORDER BY created_at DESC`,
+            params
+        );
+
+        res.json(result.rows);
+    } catch (err) {
+        console.error('Webhooks list error:', err);
+        res.status(500).json({ error: 'Server error fetching webhooks' });
+    }
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/cards/webhooks  — register a new webhook endpoint (admin only)
+// Body: { name, url, events[], secret? }
+// ---------------------------------------------------------------------------
+router.post('/webhooks', async (req, res) => {
+    const { id: userId, role } = req.user;
+    const { name, url, events, secret } = req.body;
+
+    if (!name?.trim()) return res.status(400).json({ error: 'name is required' });
+    if (!url?.trim()) return res.status(400).json({ error: 'url is required' });
+    if (!Array.isArray(events) || events.length === 0) {
+        return res.status(400).json({ error: 'events must be a non-empty array' });
+    }
+
+    const VALID_EVENTS = new Set([
+        'card.created', 'card.updated', 'card.deleted', 'card.moved',
+        'card.subtask_completed', 'card.due_reminder', 'comment.added',
+        'tag.added', 'tag.removed', 'bulk.action'
+    ]);
+
+    const invalidEvents = events.filter(e => !VALID_EVENTS.has(e));
+    if (invalidEvents.length) {
+        return res.status(400).json({ error: `Invalid event(s): ${invalidEvents.join(', ')}`, valid_events: [...VALID_EVENTS] });
+    }
+
+    try {
+        const result = await req.db.query(
+            `INSERT INTO webhooks (name, url, events, secret, created_by)
+             VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+            [name.trim(), url.trim(), events, secret || null, userId]
+        );
+
+        audit(req.db, 'webhook_created', userId, req.ip, { webhook_id: result.rows[0].id, name });
+        res.status(201).json(result.rows[0]);
+    } catch (err) {
+        console.error('Webhook create error:', err);
+        res.status(500).json({ error: 'Server error creating webhook' });
+    }
+});
+
+// ---------------------------------------------------------------------------
+// PUT /api/cards/webhooks/:id  — update a webhook
+// ---------------------------------------------------------------------------
+router.put('/webhooks/:id', async (req, res) => {
+    const { id: userId } = req.user;
+
+    try {
+        const whResult = await req.db.query('SELECT * FROM webhooks WHERE id = $1', [parseInt(req.params.id, 10)]);
+        const webhook = whResult.rows[0];
+        if (!webhook) return res.status(404).json({ error: 'Webhook not found' });
+
+        if (req.user.role !== 'admin' && webhook.created_by !== userId) {
+            return res.status(403).json({ error: 'Only the creator or an admin can update this webhook' });
+        }
+
+        const updates = req.body;
+        const fields = [];
+        const values = [];
+        let idx = 1;
+
+        if ('name' in updates) { fields.push(`name = $${idx++}`); values.push(updates.name.trim()); }
+        if ('url' in updates) { fields.push(`url = $${idx++}`); values.push(updates.url.trim()); }
+        if ('events' in updates && Array.isArray(updates.events)) { fields.push(`events = $${idx++}`); values.push(updates.events); }
+        if ('secret' in updates) { fields.push(`secret = $${idx++}`); values.push(updates.secret || null); }
+        if ('active' in updates) { fields.push(`active = $${idx++}`); values.push(Boolean(updates.active)); }
+
+        if (fields.length === 0) return res.status(400).json({ error: 'No valid fields provided' });
+
+        fields.push(`updated_at = NOW()`);
+        values.push(parseInt(req.params.id, 10));
+
+        const result = await req.db.query(
+            `UPDATE webhooks SET ${fields.join(', ')} WHERE id = $${idx} RETURNING *`,
+            values
+        );
+
+        res.json(result.rows[0]);
+    } catch (err) {
+        console.error('Webhook update error:', err);
+        res.status(500).json({ error: 'Server error updating webhook' });
+    }
+});
+
+// ---------------------------------------------------------------------------
+// DELETE /api/cards/webhooks/:id  — remove a webhook (admin or creator)
+// ---------------------------------------------------------------------------
+router.delete('/webhooks/:id', async (req, res) => {
+    const { id: userId } = req.user;
+
+    try {
+        const whResult = await req.db.query('SELECT * FROM webhooks WHERE id = $1', [parseInt(req.params.id, 10)]);
+        const webhook = whResult.rows[0];
+        if (!webhook) return res.status(404).json({ error: 'Webhook not found' });
+
+        if (req.user.role !== 'admin' && webhook.created_by !== userId) {
+            return res.status(403).json({ error: 'Only the creator or an admin can delete this webhook' });
+        }
+
+        await req.db.query('DELETE FROM webhooks WHERE id = $1', [parseInt(req.params.id, 10)]);
+
+        audit(req.db, 'webhook_deleted', userId, req.ip, { webhook_id: parseInt(req.params.id, 10) });
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Webhook delete error:', err);
+        res.status(500).json({ error: 'Server error deleting webhook' });
+    }
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/cards/webhooks/:id/test  — fire a test payload to the webhook URL
+// ---------------------------------------------------------------------------
+router.post('/webhooks/:id/test', async (req, res) => {
+    const { id: userId } = req.user;
+
+    try {
+        const whResult = await req.db.query('SELECT * FROM webhooks WHERE id = $1', [parseInt(req.params.id, 10)]);
+        const webhook = whResult.rows[0];
+        if (!webhook) return res.status(404).json({ error: 'Webhook not found' });
+
+        if (req.user.role !== 'admin' && webhook.created_by !== userId) {
+            return res.status(403).json({ error: 'Access denied' });
+        }
+
+        const testPayload = {
+            event: 'webhook.test',
+            webhook_id: webhook.id,
+            name: webhook.name,
+            timestamp: new Date().toISOString(),
+            data: { message: 'Webhook test payload from Kanban Board' },
+        };
+
+        const fetchFn = globalFetch;
+        let statusCode, responseBody;
+        try {
+            const response = await fetchFn(webhook.url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Webhook-ID': String(webhook.id),
+                    ...(webhook.secret ? {
+                        'X-Webhook-Signature': crypto.createHmac('sha256', webhook.secret)
+                            .update(JSON.stringify(testPayload)).digest('hex'),
+                    } : {}),
+                },
+                body: JSON.stringify(testPayload),
+                signal: AbortSignal.timeout(10000),
+            });
+            statusCode = response.status;
+            responseBody = await response.text().catch(() => '(binary)');
+        } catch (fetchErr) {
+            statusCode = 'error';
+            responseBody = fetchErr.message;
+        }
+
+        await req.db.query(
+            `UPDATE webhooks SET last_response_code = $1, last_triggered = NOW()
+             WHERE id = $2`,
+            [statusCode !== 'error' ? statusCode : null, webhook.id]
+        );
+
+        res.json({ success: true, status_code: statusCode, response_body: responseBody.substring(0, 500) });
+    } catch (err) {
+        console.error('Webhook test error:', err);
+        res.status(500).json({ error: 'Server error testing webhook' });
+    }
+});
+
+// ---------------------------------------------------------------------------
+// Internal helper: dispatch a webhook event to all matching active webhooks
+// Fire-and-forget — does not block the caller.
+// ---------------------------------------------------------------------------
+const dispatchWebhookEvent = async (db, eventName, payload) => {
+    try {
+        const result = await db.query(
+            `SELECT * FROM webhooks WHERE active = TRUE AND $1 = ANY(events)`,
+            [eventName]
+        );
+
+        for (const wh of result.rows) {
+            (async (webhook, data) => {
+                try {
+                    const body = JSON.stringify(data);
+                    const response = await globalFetch(webhook.url, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-Webhook-ID': String(webhook.id),
+                            'X-Webhook-Event': eventName,
+                            ...(webhook.secret ? {
+                                'X-Webhook-Signature': crypto.createHmac('sha256', webhook.secret)
+                                    .update(body).digest('hex'),
+                            } : {}),
+                        },
+                        body,
+                        signal: AbortSignal.timeout(8000),
+                    });
+
+                    await db.query(
+                        `UPDATE webhooks SET last_response_code = $1, last_triggered = NOW(), updated_at = NOW()
+                         WHERE id = $2`,
+                        [response.status, webhook.id]
+                    );
+                } catch (err) {
+                    console.error(`Webhook dispatch failed for ${webhook.name} (#${webhook.id}):`, err.message);
+                    await db.query(
+                        `UPDATE webhooks SET last_response_code = 0, updated_at = NOW()
+                         WHERE id = $1`,
+                        [webhook.id]
+                    ).catch(() => {});
+                }
+            })(wh, payload).catch((err) => console.error('Webhook dispatch error:', err));
+        }
+    } catch (dbErr) {
+        // Webhooks table might not exist yet — non-fatal
+        if (!dbErr.message.includes('webhooks')) {
+            console.error('dispatchWebhookEvent DB error:', dbErr);
+        }
+    }
+};
+
+// ===========================================================================
+// BOARD ANALYTICS API (public to authenticated users, enriched for admins)
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// GET /api/cards/analytics  — board-level analytics dashboard data
+// Query params: period=daily|weekly|monthly (default: monthly), days=N (default 30)
+// ---------------------------------------------------------------------------
+router.get('/analytics', async (req, res) => {
+    const { id: userId, role } = req.user;
+    const days = parseInt(req.query.days || '30', 10);
+
+    try {
+        // Cards per column
+        const perColumn = await req.db.query(
+            `SELECT c.column_id,
+                    col.name AS column_name,
+                    COUNT(c.id) AS card_count,
+                    AVG(CASE WHEN c.due_date < NOW() AND c.due_date IS NOT NULL THEN 1 ELSE 0 END)::INT AS overdue_count
+             FROM cards c
+             LEFT JOIN columns col ON col.id = c.column_id
+             GROUP BY c.column_id, col.name
+             ORDER BY col.position`
+        );
+
+        // Cards per priority
+        const perPriority = await req.db.query(
+            `SELECT priority, COUNT(*)::INT AS count FROM cards GROUP BY priority`
+        );
+
+        // Due date distribution: overdue, due_this_week, future, no_due
+        const dueDist = await req.db.query(
+            `SELECT
+                 COUNT(CASE WHEN due_date < NOW() THEN 1 END)::INT AS overdue,
+                 COUNT(CASE WHEN due_date >= NOW() AND due_date <= NOW() + INTERVAL '7 days' THEN 1 END)::INT AS due_this_week,
+                 COUNT(CASE WHEN due_date > NOW() + INTERVAL '7 days' THEN 1 END)::INT AS future,
+                 COUNT(CASE WHEN due_date IS NULL THEN 1 END)::INT AS no_due
+             FROM cards`
+        );
+
+        // Creation rate over the requested period (daily buckets)
+        const creationRate = await req.db.query(
+            `SELECT DATE(created_at) AS date, COUNT(*)::INT AS created_count
+             FROM cards WHERE created_at >= NOW() - ($1 || ' days')::INTERVAL
+             GROUP BY DATE(created_at) ORDER BY date DESC`,
+            [days]
+        );
+
+        // Activity heatmap (last N days)
+        const activityHeat = await req.db.query(
+            `SELECT DATE(created_at) AS date, action,
+                    COUNT(*)::INT AS event_count
+             FROM card_activity WHERE created_at >= NOW() - ($1 || ' days')::INTERVAL
+             GROUP BY DATE(created_at), action ORDER BY date DESC`,
+            [days]
+        );
+
+        // User contribution stats (cards created per user)
+        const userStats = await req.db.query(
+            `SELECT u.id, u.username,
+                    COUNT(c.id)::INT AS cards_created,
+                    COUNT(CASE WHEN c.assignee_id IS NOT NULL THEN 1 END)::INT AS cards_assigned
+             FROM users u
+             LEFT JOIN cards c ON c.owner_id = u.id
+             GROUP BY u.id, u.username ORDER BY cards_created DESC`
+        );
+
+        // Average cycle time: avg days from creation to moved out of first column (approximation)
+        const cycleTime = await req.db.query(
+            `SELECT AVG(EXTRACT(EPOCH FROM (MAX(created_at) - MIN(created_at))) / 86400)::NUMERIC(10,2) AS avg_days
+             FROM card_activity WHERE action IN ('created', 'moved') GROUP BY card_id`,
+            []
+        );
+
+        // Completion rate: subtasks completed vs total (if table exists)
+        let subtaskStats = { total: 0, completed: 0 };
+        try {
+            const stResult = await req.db.query(
+                `SELECT COUNT(*)::INT AS total,
+                        COUNT(CASE WHEN completed THEN 1 END)::INT AS completed
+                 FROM card_subtasks`
+            );
+            subtaskStats = stResult.rows[0];
+        } catch (_) { /* table may not exist yet */ }
+
+        res.json({
+            period_days: days,
+            per_column: perColumn.rows,
+            per_priority: perPriority.rows,
+            due_distribution: dueDist.rows[0],
+            creation_rate: creationRate.rows,
+            activity_heatmap: activityHeat.rows,
+            user_contributions: userStats.rows,
+            avg_cycle_time_days: cycleTime.rows[0]?.avg_days || null,
+            subtask_stats: subtaskStats,
+        });
+    } catch (err) {
+        console.error('Analytics fetch error:', err);
+        res.status(500).json({ error: 'Server error fetching analytics' });
+    }
+});
+
+// ===========================================================================
+// EMAIL / NOTIFICATION HELPERS
+// ===========================================================================
+
+const sgMail = (await import('@sendgrid/mail')).default;
+
+// ---------------------------------------------------------------------------
+// Helper: send a notification email via SendGrid (fire-and-forget)
+// ---------------------------------------------------------------------------
+const sendNotificationEmail = async (db, toEmail, subject, htmlContent) => {
+    try {
+        const sgKey = process.env.SENDGRID_API_KEY;
+        if (!sgKey) return;  // no key configured — skip silently
+
+        sgMail.setApiKey(sgKey);
+        await sgMail.send({
+            to: toEmail,
+            from: process.env.SENDGRID_FROM_EMAIL || 'noreply@kanban.local',
+            subject,
+            html: htmlContent,
+        });
+    } catch (err) {
+        console.error('Notification email error:', err.message);
+    }
+};
+
+// ---------------------------------------------------------------------------
+// Helper: check notification prefs and dispatch emails for a card event
+// ---------------------------------------------------------------------------
+const notifyCardEvent = async (db, eventName, cardId, eventData) => {
+    try {
+        // Get card details for the email body
+        const cardResult = await db.query('SELECT * FROM cards WHERE id = $1', [cardId]);
+        const card = cardResult.rows[0];
+        if (!card) return;
+
+        // Map event names to notification preference fields
+        const prefMap = {
+            'card.created': 'card_created',
+            'card.updated': 'card_updated',
+            'card.deleted': null,       // deletion doesn't usually need email
+            'card.moved': 'card_moved',
+            'card.assigned': 'card_assigned',
+            'comment.added': 'comment_added',
+        };
+        const prefField = prefMap[eventName];
+        if (!prefField) return;
+
+        // Find users who want this notification and are not the actor
+        const result = await db.query(
+            `SELECT u.email, u.username, np.${prefField} AS enabled
+             FROM notification_prefs np
+             JOIN users u ON u.id = np.user_id
+             WHERE ${eventName === 'card.assigned' ? 'u.id = $1 AND np.card_assigned = TRUE' : `np.${prefField} = TRUE AND u.id != $1`}`,
+            [eventData.actorId || eventData.assignee_id]
+        );
+
+        for (const row of result.rows) {
+            if (!row.enabled && eventName !== 'card.assigned') continue;
+            const eventLabel = eventName.replace('card.', '').replace('_', ' ');
+            const htmlContent = `
+                <h3>📋 ${eventLabel} — Kanban Board</h3>
+                <p><strong>Card:</strong> ${escapeHtml(card.title)}</p>
+                ${eventData.from_column ? `<p>Moved from: ${escapeHtml(eventData.from_column)} → <strong>${escapeHtml(eventData.to_column)}</strong></p>` : ''}
+                ${eventData.priority ? `<p>New priority: <strong>${escapeHtml(eventData.priority)}</strong></p>` : ''}
+                <p><em>Check the board for details.</em></p>
+            `;
+            sendNotificationEmail(db, row.email,
+                `[Kanban] Card "${card.title}" — ${eventLabel}`, htmlContent);
+        }
+    } catch (err) {
+        console.error('notifyCardEvent error:', err.message);
+    }
+};
+
+// ---------------------------------------------------------------------------
+// Helper: escape HTML for email bodies
+// ---------------------------------------------------------------------------
+function escapeHtml(str) {
+    if (!str && str !== 0) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+// ===========================================================================
+// NOTIFICATION PREFERENCES API
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// GET /api/cards/notification-prefs  — get current user's notification prefs
+// ---------------------------------------------------------------------------
+router.get('/notification-prefs', async (req, res) => {
+    const { id: userId } = req.user;
+    try {
+        const result = await req.db.query(
+            'SELECT * FROM notification_prefs WHERE user_id = $1',
+            [userId]
+        );
+
+        // If no row exists (new user), create defaults
+        if (!result.rows[0]) {
+            const created = await req.db.query(
+                'INSERT INTO notification_prefs (user_id) VALUES ($1) RETURNING *',
+                [userId]
+            );
+            res.json(created.rows[0]);
+        } else {
+            res.json(result.rows[0]);
+        }
+    } catch (err) {
+        console.error('Notification prefs fetch error:', err);
+        res.status(500).json({ error: 'Server error fetching notification preferences' });
+    }
+});
+
+// ---------------------------------------------------------------------------
+// PUT /api/cards/notification-prefs  — update notification preferences
+// ---------------------------------------------------------------------------
+router.put('/notification-prefs', async (req, res) => {
+    const { id: userId } = req.user;
+    const updates = req.body;
+
+    try {
+        const fields = [];
+        const values = [];
+        let idx = 1;
+
+        const ALLOWED_PREF_FIELDS = [
+            'card_created', 'card_updated', 'card_assigned', 'card_moved',
+            'card_due_reminder', 'comment_added', 'digest_enabled', 'digest_frequency'
+        ];
+
+        for (const key of ALLOWED_PREF_FIELDS) {
+            if (key in updates) {
+                fields.push(`${key} = $${idx++}`);
+                values.push(updates[key]);
+            }
+        }
+
+        if (fields.length === 0) {
+            return res.status(400).json({ error: 'No valid preference fields provided' });
+        }
+
+        fields.push(`updated_at = NOW()`);
+        values.push(userId);
+
+        const result = await req.db.query(
+            `UPDATE notification_prefs SET ${fields.join(', ')} WHERE user_id = $${idx} RETURNING *`,
+            values
+        );
+
+        // Upsert: if no row existed, insert
+        if (!result.rows[0]) {
+            const created = await req.db.query(
+                `INSERT INTO notification_prefs (user_id) VALUES ($1) RETURNING *`,
+                [userId]
+            );
+            res.json(created.rows[0]);
+        } else {
+            res.json(result.rows[0]);
+        }
+    } catch (err) {
+        console.error('Notification prefs update error:', err);
+        res.status(500).json({ error: 'Server error updating notification preferences' });
+    }
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/cards/notification-prefs/test  — send a test notification email
+// ---------------------------------------------------------------------------
+router.post('/notification-prefs/test', async (req, res) => {
+    const { id: userId } = req.user;
+
+    try {
+        const userResult = await req.db.query('SELECT email FROM users WHERE id = $1', [userId]);
+        const user = userResult.rows[0];
+        if (!user) return res.status(404).json({ error: 'User not found' });
+
+        sendNotificationEmail(req.db, user.email,
+            '[Kanban] Test Notification',
+            '<h3>✅ Test Notification</h3><p>If you received this, email notifications are working.</p>'
+        );
+
+        res.json({ success: true, sent_to: user.email });
+    } catch (err) {
+        console.error('Notification test error:', err);
+        res.status(500).json({ error: 'Server error sending test notification' });
     }
 });
 

@@ -28,9 +28,13 @@ COPY routes/           ./routes/
 COPY public/           ./public/
 
 # Copy database scripts (used during initial setup, not at runtime)
-COPY schema.sql        ./
+COPY schema.sql         ./
 COPY columns_default.sql ./
 COPY seed_admin.js     ./
+
+# Copy migrations and migration runner
+COPY migrations/       ./migrations/
+COPY scripts/          ./scripts/
 
 # Non-root user for security
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup

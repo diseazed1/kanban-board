@@ -12,6 +12,7 @@
     "dev": "NODE_ENV=development node --watch server.mjs",
     "seed-admin": "node seed_admin.js",
     "db:schema": "psql $DATABASE_URL -f schema.sql",
+    "db:migrate": "node scripts/run_migration.js",
     "db:seed-columns": "psql $DATABASE_URL -f columns_default.sql"
   },
   "dependencies": {

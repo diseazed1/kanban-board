@@ -23,6 +23,8 @@ import cardRoutes   from './routes/cards.js';
 import adminRoutes  from './routes/admin.js';
 import importRoutes from './routes/import.js';
 
+// Mount all routes (analytics is in cards.js via /api/cards/analytics)
+
 // ---------------------------------------------------------------------------
 // Validate required environment variables at startup
 // ---------------------------------------------------------------------------
@@ -45,6 +47,56 @@ const db = new pg.Pool({
 });
 
 db.on('error', (err) => console.error('PostgreSQL pool error:', err));
+
+// ---------------------------------------------------------------------------
+// Auto-run pending SQL migrations on startup
+// ---------------------------------------------------------------------------
+async function runPendingMigrations() {
+    try {
+        // Create migration tracking table if needed
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS schema_migrations (
+                id       SERIAL PRIMARY KEY,
+                filename VARCHAR(255) UNIQUE NOT NULL,
+                applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        `);
+
+        // Get list of migration files (sorted)
+        const migrationsDir = path.join(process.cwd(), 'migrations');
+        let files;
+        try {
+            files = await fs.readdir(migrationsDir).then(f => f.sort());
+        } catch (_) {
+            console.log('  ℹ No migrations directory found, skipping auto-migrate');
+            return;
+        }
+
+        // Get already-applied migrations
+        const appliedResult = await db.query('SELECT filename FROM schema_migrations');
+        const appliedNames = new Set(appliedResult.rows.map(r => r.filename));
+
+        for (const file of files) {
+            if (!file.endsWith('.sql')) continue;
+            if (appliedNames.has(file)) continue;
+
+            console.log(`  ▶ Applying migration: ${file}`);
+            const sql = await fs.readFile(path.join(migrationsDir, file), 'utf-8');
+            await db.query(sql);
+            await db.query('INSERT INTO schema_migrations (filename) VALUES ($1)', [file]);
+            console.log(`  ✅ Applied migration: ${file}`);
+        }
+
+        if (files.filter(f => f.endsWith('.sql')).length > 0) {
+            console.log('  ℹ All migrations current');
+        }
+    } catch (err) {
+        console.error('  ⚠ Migration error:', err.message);
+    }
+}
+
+// Run migrations before starting the server
+await runPendingMigrations();
 
 // ---------------------------------------------------------------------------
 // File upload configuration (multer)

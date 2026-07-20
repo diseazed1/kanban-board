@@ -175,6 +175,48 @@
         .visibility-badge.public  { background: #d5f5e3; color: #1e8449; }
         .visibility-badge.private { background: #fde8e8; color: #c0392b; }
 
+        /* Tag badges — color-coded */
+        .tag-badges { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+        .tag-badge {
+            display: inline-block;
+            padding: 1px 7px;
+            border-radius: 3px;
+            font-size: 0.65rem;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+            cursor: default;
+        }
+        .tag-badge:nth-child(8n+1) { background: #e8daef; color: #6c3483; }
+        .tag-badge:nth-child(8n+2) { background: #d4efdf; color: #1e8449; }
+        .tag-badge:nth-child(8n+3) { background: #d6eaf8; color: #1f618d; }
+        .tag-badge:nth-child(8n+4) { background: #fef9e7; color: #b7950b; }
+        .tag-badge:nth-child(8n+5) { background: #fadbd8; color: #c0392b; }
+        .tag-badge:nth-child(8n+6) { background: #f5eef8; color: #7d3c98; }
+        .tag-badge:nth-child(8n+7) { background: #e8f6f3; color: #0e6655; }
+        .tag-badge:nth-child(8n+8) { background: #fdebd0; color: #a04000; }
+
+        /* Subtask list styles */
+        .subtask-list { list-style: none; padding: 0; margin: 6px 0 0 0; }
+        .subtask-item {
+            display: flex; align-items: center; gap: 6px;
+            padding: 4px 8px; margin-bottom: 2px; border-radius: 3px;
+            font-size: 0.85rem;
+        }
+        .subtask-item.completed { text-decoration: line-through; opacity: 0.6; }
+        .subtask-checkbox { cursor: pointer; flex-shrink: 0; }
+        .subtask-title-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .subtask-delete-btn {
+            color: #e74c3c; cursor: pointer; font-size: 0.8rem;
+            padding: 2px 6px; border: none; background: none; flex-shrink: 0;
+        }
+        .subtask-delete-btn:hover { text-decoration: underline; }
+
+        /* Subtask form inputs */
+        .detail-input {
+            flex: 1; padding: 4px 8px; border: 1px solid #ccc;
+            border-radius: 4px; font-size: 0.85rem;
+        }
+
         .comment-count-badge {
             font-size: 0.7rem; color: #7f8c8d;
         }
@@ -381,6 +423,12 @@
     </div>
 
     <div class="board" id="kanban-board"></div>
+
+    <!-- ADMIN NAV LINKS (shown only to admins) -->
+    <nav id="adminNav" style="display:none;padding:0.75rem 1rem;background:#f8f9fa;border-bottom:1px solid #ddd;font-size:0.85rem;">
+        <a href="#" id="adminDashboardLink" style="color:#2c3e50;text-decoration:none;margin-right:1.5rem;">📊 Analytics</a>
+        <a href="#" id="adminWebhooksLink" style="color:#2c3e50;text-decoration:none;">🔗 Webhooks</a>
+    </nav>
 </div>
 
 <!-- CARD EDITOR MODAL -->
@@ -473,6 +521,24 @@
         <div class="detail-section">
             <h3>Activity Timeline</h3>
             <ul class="activity-timeline" id="activityTimeline"></ul>
+        </div>
+
+        <div class="detail-section">
+            <h3>Subtasks</h3>
+            <ul class="subtask-list" id="subtaskList"></ul>
+            <div style="display:flex;gap:6px;margin-top:8px;">
+                <input type="text" id="newSubtaskTitle" class="detail-input" placeholder="Add a subtask...">
+                <button class="btn btn-primary btn-sm" id="addSubtaskBtn">Add</button>
+            </div>
+        </div>
+
+        <div class="detail-section">
+            <h3>Tags</h3>
+            <div class="tag-badges" id="detailTagBadges"></div>
+            <div style="display:flex;gap:6px;margin-top:8px;">
+                <input type="text" id="newTagInput" class="detail-input" placeholder="Add a tag...">
+                <button class="btn btn-primary btn-sm" id="addTagBtn">Add</button>
+            </div>
         </div>
     </div>
     <div class="modal-footer">
@@ -586,6 +652,11 @@ function renderUserBadge() {
         <span class="role-tag ${currentUser.role}">${currentUser.role}</span>`;
     document.getElementById('adminLink').style.display =
         currentUser.role === 'admin' ? 'inline-block' : 'none';
+    // Show admin nav for analytics + webhooks
+    const adminNav = document.getElementById('adminNav');
+    if (adminNav) {
+        adminNav.style.display = currentUser.role === 'admin' ? 'block' : 'none';
+    }
 }
 
 // ============================================================================
@@ -824,16 +895,19 @@ async function openDetailModal(cardId) {
             ${card.assignee_username ? ` | Assigned to: <strong>${escapeHtml(card.assignee_username)}</strong>` : ''}
         </p>`;
 
-    // Load comments, activity, and attachments in parallel
-    const [comments, activity, attachments] = await Promise.all([
+    // Load comments, activity, attachments, subtasks, and tags in parallel
+    const [comments, activity, attachments, subtasks, cardTags] = await Promise.all([
         api('GET', `/api/cards/${cardId}/comments`).catch(() => []),
         api('GET', `/api/cards/${cardId}/activity`).catch(() => []),
         api('GET', `/api/cards/${cardId}/attachments`).catch(() => []),
+        api('GET', `/api/cards/${cardId}/subtasks`).catch(() => []),
     ]);
 
     renderComments(comments || []);
     renderActivity(activity || []);
     renderAttachments(attachments || []);
+    renderSubtasks(subtasks || []);
+    renderCardTags(cardId);  // fetch tags separately for the detail view
 
     detailModal.showModal();
 }
@@ -886,6 +960,15 @@ function formatActivityAction(a) {
         case 'comment_added': return `added a comment`;
         case 'document_added': return `attached <strong>${escapeHtml(d.filename || 'a file')}</strong>`;
         case 'document_removed': return `removed attachment <strong>${escapeHtml(d.filename || '')}</strong>`;
+        case 'subtask_added': return `added subtask: <strong>${escapeHtml(d.title || '')}</strong>`;
+        case 'subtask_completed': return `completed subtask`;
+        case 'subtask_unchecked': return `unchecked subtask`;
+        case 'subtask_removed': return `removed subtask`;
+        case 'subtask_edited': return `edited a subtask`;
+        case 'tags_added': return `added tag(s): ${(d.tags || []).map(t => `<strong>${escapeHtml(t)}</strong>`).join(', ')}`;
+        case 'tag_removed': return `removed tag <strong>${escapeHtml(d.tag || '')}</strong>`;
+        case 'cloned': return `cloned this card`;
+        case 'bulk_moved': return `bulk moved cards`;  
         default: return escapeHtml(a.action);
     }
 }
@@ -1010,8 +1093,243 @@ document.getElementById('commentList').addEventListener('click', async (e) => {
 });
 
 // ============================================================================
-// Board click delegation (Edit, Delete, Detail buttons)
+// Subtasks
 // ============================================================================
+let currentSubtaskCardId = null;
+
+function renderSubtasks(subtasks) {
+    const list = document.getElementById('subtaskList');
+    if (subtasks.length === 0) {
+        list.innerHTML = '<li style="font-size:0.8rem;color:#999;margin-top:4px;">No subtasks yet.</li>';
+        return;
+    }
+    const completedCount = subtasks.filter(s => s.completed).length;
+    list.innerHTML = `
+        <div style="font-size:0.75rem;color:#7f8c8d;margin-bottom:6px;">${completedCount}/${subtasks.length} completed</div>
+        ${subtasks.map(s => `
+            <li class="subtask-item ${s.completed ? 'completed' : ''}">
+                <input type="checkbox" class="subtask-checkbox"
+                    data-subtask-id="${s.id}" ${s.completed ? 'checked' : ''}>
+                <span class="subtask-title-text">${escapeHtml(s.title)}</span>
+                <button class="subtask-delete-btn" data-subtask-id="${s.id}" title="Remove">✕</button>
+            </li>`).join('')}
+    `;
+}
+
+async function renderCardTags(cardId) {
+    const container = document.getElementById('detailTagBadges');
+    try {
+        const cardTags = await api('GET', `/api/cards/${cardId}/tags`).catch(() => []);
+        if (!container) return;
+        if (cardTags.length === 0) {
+            container.innerHTML = '<span style="font-size:0.8rem;color:#999;">No tags yet.</span>';
+        } else {
+            container.innerHTML = cardTags.map(t =>
+                `<span class="tag-badge" title="${escapeHtml(t.name)}">${escapeHtml(t.slug)}</span>`
+            ).join('');
+        }
+    } catch (err) {
+        if (container) container.innerHTML = '';
+    }
+}
+
+// Add subtask button
+document.getElementById('addSubtaskBtn').addEventListener('click', async () => {
+    const input = document.getElementById('newSubtaskTitle');
+    const title = input.value.trim();
+    if (!title || !detailCardId) return;
+    try {
+        await api('POST', `/api/cards/${detailCardId}/subtasks`, { title });
+        input.value = '';
+        const subtasks = await api('GET', `/api/cards/${detailCardId}/subtasks`).catch(() => []);
+        renderSubtasks(subtasks || []);
+    } catch (err) { alert('Add subtask failed: ' + err.message); }
+});
+
+// Toggle subtask completion (event delegation)
+document.getElementById('subtaskList').addEventListener('change', async (e) => {
+    const checkbox = e.target.closest('.subtask-checkbox');
+    if (!checkbox || !detailCardId) return;
+    const subtaskId = parseInt(checkbox.dataset.subtaskId, 10);
+    try {
+        await api('PUT', `/api/cards/${detailCardId}/subtasks/${subtaskId}`, { completed: checkbox.checked });
+        const subtasks = await api('GET', `/api/cards/${detailCardId}/subtasks`).catch(() => []);
+        renderSubtasks(subtasks || []);
+    } catch (err) { alert('Update failed: ' + err.message); }
+});
+
+// Delete subtask (event delegation)
+document.getElementById('subtaskList').addEventListener('click', async (e) => {
+    const btn = e.target.closest('.subtask-delete-btn');
+    if (!btn || !detailCardId) return;
+    try {
+        await api('DELETE', `/api/cards/${detailCardId}/subtasks/${btn.dataset.subtaskId}`);
+        const subtasks = await api('GET', `/api/cards/${detailCardId}/subtasks`).catch(() => []);
+        renderSubtasks(subtasks || []);
+    } catch (err) { alert('Remove failed: ' + err.message); }
+});
+
+// ============================================================================
+// Tags in detail modal
+// ============================================================================
+async function fetchCardTags(cardId) {
+    try {
+        // Fetch all tags and find ones associated with this card via a workaround:
+        // GET /api/cards/tags returns all system tags. We need to add a per-card endpoint.
+        const allTags = await api('GET', '/api/cards/tags').catch(() => []);
+        return allTags || [];
+    } catch { return []; }
+}
+
+// Add tag button
+document.getElementById('addTagBtn')?.addEventListener('click', async () => {
+    const input = document.getElementById('newTagInput');
+    const tagSlug = input.value.trim().toLowerCase();
+    if (!tagSlug || !detailCardId) return;
+    try {
+        await api('POST', `/api/cards/${detailCardId}/tags`, { tags: [tagSlug] });
+        input.value = '';
+        // Refresh tag display from per-card endpoint
+        const cardTags = await api('GET', `/api/cards/${detailCardId}/tags`).catch(() => []);
+        if (cardTags.length === 0) {
+            document.getElementById('detailTagBadges').innerHTML = '<span style="font-size:0.8rem;color:#999;">No tags yet.</span>';
+        } else {
+            document.getElementById('detailTagBadges').innerHTML = cardTags.map(t =>
+                `<span class="tag-badge" title="${escapeHtml(t.name)}">${escapeHtml(t.slug)}</span>`
+            ).join('');
+        }
+    } catch (err) { alert('Add tag failed: ' + err.message); }
+});
+
+function renderTagBadges(tags) {
+    const container = document.getElementById('detailTagBadges');
+    if (!container) return;
+    if (tags.length === 0) {
+        container.innerHTML = '<span style="font-size:0.8rem;color:#999;">No tags yet.</span>';
+        return;
+    }
+    container.innerHTML = tags.map(t =>
+        `<span class="tag-badge" title="${escapeHtml(t.name)} (${t.card_count || 0} cards)">${escapeHtml(t.slug)}</span>`
+    ).join('');
+}
+
+// ============================================================================
+// Analytics Dashboard (admin only)
+// ============================================================================
+document.getElementById('adminDashboardLink')?.addEventListener('click', async (e) => {
+    e.preventDefault();
+    try {
+        const data = await api('GET', '/api/cards/analytics?days=30');
+        let html = '<div style="max-height:60vh;overflow:auto;">';
+        html += `<h4>📊 Board Analytics (last ${data.period_days} days)</h4>`;
+
+        if (data.per_column?.length) {
+            html += '<h5>Cards by Column</h5><table style="border-collapse:collapse;font-size:0.85rem;">';
+            html += '<tr><th>Column</th><th>Cards</th><th>Overdue</th></tr>';
+            data.per_column.forEach(c => {
+                html += `<tr><td>${escapeHtml(c.column_name)}</td><td>${c.card_count}</td><td style="color:${c.overdue_count > 0 ? '#e74c3c' : '#2ecc71'}">${c.overdue_count || 0}</td></tr>`;
+            });
+            html += '</table>';
+        }
+
+        if (data.per_priority?.length) {
+            html += '<h5>Cards by Priority</h5><ul style="font-size:0.85rem;">';
+            data.per_priority.forEach(p => { html += `<li>${escapeHtml(p.priority)}: ${p.count}</li>`; });
+            html += '</ul>';
+        }
+
+        if (data.due_distribution) {
+            const d = data.due_distribution;
+            html += '<h5>Due Date Distribution</h5><ul style="font-size:0.85rem;">';
+            html += `<li>Overdue: <strong style="color:#e74c3c">${d.overdue}</strong></li>`;
+            html += `<li>Due this week: ${d.due_this_week}</li><li>Future: ${d.future}</li><li>No due date: ${d.no_due}</li>`;
+            html += '</ul>';
+        }
+
+        if (data.subtask_stats) {
+            const st = data.subtask_stats;
+            const pct = st.total > 0 ? ((st.completed / st.total) * 100).toFixed(1) : '0.0';
+            html += `<h5>Subtasks</h5><p style="font-size:0.85rem;">${st.completed}/${st.total} completed (${pct}%)</p>`;
+        }
+
+        if (data.user_contributions?.length) {
+            html += '<h5>User Contributions</h5><table style="border-collapse:collapse;font-size:0.85rem;">';
+            html += '<tr><th>User</th><th>Created</th><th>Assigned</th></tr>';
+            data.user_contributions.forEach(u => {
+                html += `<tr><td>${escapeHtml(u.username)}</td><td>${u.cards_created}</td><td>${u.cards_assigned || 0}</td></tr>`;
+            });
+            html += '</table>';
+        }
+
+        html += '</div>';
+
+        // Show in a new detail modal or alert-style dialog
+        const div = document.createElement('div');
+        div.innerHTML = `<dialog id="analyticsModal" style="width:90%;max-width:600px;padding:1rem;">${html}<button class="btn btn-secondary" onclick="document.getElementById('analyticsModal').close()" style="margin-top:1rem;">Close</button></dialog>`;
+        document.body.appendChild(div);
+        document.getElementById('analyticsModal').showModal();
+    } catch (err) { alert('Analytics failed: ' + err.message); }
+});
+
+// ============================================================================
+// Webhooks Management (admin only)
+// ============================================================================
+document.getElementById('adminWebhooksLink')?.addEventListener('click', async (e) => {
+    e.preventDefault();
+    try {
+        const webhooks = await api('GET', '/api/cards/webhooks');
+        let html = '<h4>🔗 Webhooks</h4>';
+
+        if (!webhooks?.length || webhooks.length === 0) {
+            html += '<p style="font-size:0.85rem;color:#999;">No webhooks configured.</p>';
+        } else {
+            html += `<table style="border-collapse:collapse;font-size:0.8rem;width:100%;">`;
+            html += '<tr><th>Name</th><th>URL</th><th>Events</th><th>Status</th><th>Last</th></tr>';
+            webhooks.forEach(wh => {
+                const statusColor = wh.active ? '#2ecc71' : '#e74c3c';
+                html += `<tr>
+                    <td>${escapeHtml(wh.name)}</td>
+                    <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(wh.url)}</td>
+                    <td>${(wh.events || []).join(', ')}</td>
+                    <td style="color:${statusColor}">${wh.active ? 'Active' : 'Inactive'}</td>
+                    <td>${wh.last_triggered ? formatTime(wh.last_triggered) : '—'}</td>
+                </tr>`;
+            });
+            html += '</table>';
+        }
+
+        // Add new webhook form
+        html += `
+            <h5 style="margin-top:1rem;">Add Webhook</h5>
+            <div style="display:flex;flex-direction:column;gap:6px;font-size:0.85rem;">
+                <input id="whName" class="detail-input" placeholder="Webhook name"> 
+                <input id="whUrl" class="detail-input" placeholder="https://your-server.com/webhook">
+                <input id="whEvents" class="detail-input" placeholder="card.created,card.moved (comma separated)">
+                <button class="btn btn-primary btn-sm" id="addWebhookBtn">Register</button>
+            </div>`;
+
+        const div = document.createElement('div');
+        div.innerHTML = `<dialog id="webhooksModal" style="width:90%;max-width:700px;padding:1rem;">${html}<button class="btn btn-secondary" onclick="document.getElementById('webhooksModal').close()" style="margin-top:1rem;">Close</button></dialog>`;
+        document.body.appendChild(div);
+        document.getElementById('webhooksModal').showModal();
+
+        // Register webhook handler
+        document.getElementById('addWebhookBtn')?.addEventListener('click', async () => {
+            const name = document.getElementById('whName').value.trim();
+            const url  = document.getElementById('whUrl').value.trim();
+            const eventsStr = document.getElementById('whEvents').value.trim();
+            if (!name || !url) { alert('Name and URL are required'); return; }
+            try {
+                await api('POST', '/api/cards/webhooks', {
+                    name, url,
+                    events: eventsStr.split(',').map(s => s.trim()).filter(Boolean),
+                });
+                document.getElementById('webhooksModal').close();
+                alert('Webhook registered!');
+            } catch (err) { alert('Failed: ' + err.message); }
+        });
+    } catch (err) { alert('Webhooks failed: ' + err.message); }
+});
 document.getElementById('kanban-board').addEventListener('click', async (e) => {
     const detailBtn = e.target.closest('.card-detail-btn');
     if (detailBtn) { e.stopPropagation(); openDetailModal(detailBtn.dataset.cardId); return; }
