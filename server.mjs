@@ -21,6 +21,7 @@ import authRoutes   from './routes/auth.js';
 import columnRoutes from './routes/columns.js';
 import cardRoutes   from './routes/cards.js';
 import adminRoutes  from './routes/admin.js';
+import importRoutes from './routes/import.js';
 
 // ---------------------------------------------------------------------------
 // Validate required environment variables at startup
@@ -138,6 +139,7 @@ app.use('/api/auth',    loginLimiter, authRoutes);
 app.use('/api/columns', authenticate, columnRoutes);
 app.use('/api/cards',   authenticate, cardRoutes);
 app.use('/api/admin',   authenticate, requireRole('admin'), adminRoutes);
+app.use('/api/import',  authenticate, requireRole('admin'), importRoutes);
 
 // ---------------------------------------------------------------------------
 // Health check — used by Fly.io TCP/HTTP probes

@@ -5,17 +5,17 @@
  * comments, and position reordering.
  *
  * Endpoints:
- *   GET    /api/cards                    — list cards (filtered by visibility)
- *   POST   /api/cards                    — create a new card
+ *   GET    /api/cards                    — list/search/filter cards (with due_date + overdue)
+ *   POST   /api/cards                    — create a new card (with due_date support)
  *   GET    /api/cards/:id                — get a single card (with activity + comments)
- *   PUT    /api/cards/:id                — update a card (owner or admin only)
+ *   PUT    /api/cards/:id                — update a card (owner or admin only) [due_date]
  *   PATCH  /api/cards/:id/visibility     — toggle public/private (owner or admin)
  *   PATCH  /api/cards/:id/reorder        — move card to column + position
  *   DELETE /api/cards/:id                — delete a card (owner or admin only)
- *   GET    /api/cards/:id/comments       — list comments on a card
- *   POST   /api/cards/:id/comments       — add a comment
- *   DELETE /api/cards/:id/comments/:cid  — delete a comment (author or admin)
- *   GET    /api/cards/:id/activity       — get activity timeline for a card
+ *   POST   /api/cards/:id/clone          — clone a card
+ *   GET    /api/cards/tags               — list all tags in use
+ *   POST   /api/cards/:id/tags           — add tag(s) to a card
+ *   DELETE /api/cards/:id/tags/:tagId    — remove tag from card
  */
 
 import { Router } from 'express';
@@ -26,6 +26,19 @@ const router = Router();
 
 const VALID_PRIORITIES  = new Set(['critical', 'high', 'medium', 'low', 'minimal']);
 const VALID_VISIBILITY  = new Set(['public', 'private']);
+
+// ---------------------------------------------------------------------------
+// Helper: build visibility WHERE clause + params for card queries
+// ---------------------------------------------------------------------------
+function buildVisibilityWhere(userId, role, paramOffset = 1) {
+    if (role === 'admin') {
+        return { whereClause: '', params: [] };
+    }
+    return {
+        whereClause: `(c.visibility = 'public' OR c.owner_id = $${paramOffset} OR c.assignee_id = $${paramOffset})`,
+        params: [userId],
+    };
+}
 
 // ---------------------------------------------------------------------------
 // Helper: audit log (fire-and-forget)
@@ -58,37 +71,110 @@ function canView(card, userId, role) {
 }
 
 // ---------------------------------------------------------------------------
-// GET /api/cards
+// GET /api/cards  — list/search/filter cards
+// Query params:
+//   search         - keyword (matches title/description via trigram)
+//   priority       - filter by priority level
+//   column_id      - filter by column
+//   assignee_id    - filter by assignee user ID
+//   tag            - filter by tag slug
+//   due_before     - ISO date, return cards due before this time
+//   overdue        - "true" returns only overdue cards
+//   status         - "overdue", "due_week", "no_due" for special filters
 // ---------------------------------------------------------------------------
 router.get('/', async (req, res) => {
     const { id: userId, role } = req.user;
+    const {
+        search,
+        priority,
+        column_id,
+        assignee_id,
+        tag,
+        due_before,
+        overdue,
+        status,
+    } = req.query;
 
     try {
-        let query;
-        let params;
+        const vis = buildVisibilityWhere(userId, role, 1);
+        let whereClauses = [vis.whereClause];
+        let params = [...vis.params];
+        let idx = 2;
 
-        if (role === 'admin') {
-            query  = `SELECT c.*, 
-                             o.username AS owner_username,
-                             a.username AS assignee_username
-                      FROM cards c
-                      LEFT JOIN users o ON o.id = c.owner_id
-                      LEFT JOIN users a ON a.id = c.assignee_id
-                      ORDER BY c.column_id, c.position_in_column`;
-            params = [];
-        } else {
-            query  = `SELECT c.*,
-                             o.username AS owner_username,
-                             a.username AS assignee_username
-                      FROM cards c
-                      LEFT JOIN users o ON o.id = c.owner_id
-                      LEFT JOIN users a ON a.id = c.assignee_id
-                      WHERE c.visibility = 'public'
-                         OR c.owner_id    = $1
-                         OR c.assignee_id = $1
-                      ORDER BY c.column_id, c.position_in_column`;
-            params = [userId];
+        // Text search (title + description)
+        if (search) {
+            whereClauses.push(`(c.title ILIKE $${idx} OR c.description ILIKE $${idx})`);
+            params.push(`%${search}%`);
+            idx++;
         }
+
+        // Priority filter
+        if (priority && VALID_PRIORITIES.has(priority)) {
+            whereClauses.push(`c.priority = $${idx}`);
+            params.push(priority);
+            idx++;
+        } else if (priority && !VALID_PRIORITIES.has(priority)) {
+            return res.status(400).json({ error: `priority must be one of: ${[...VALID_PRIORITIES].join(', ')}` });
+        }
+
+        // Column filter
+        if (column_id) {
+            whereClauses.push(`c.column_id = $${idx}`);
+            params.push(parseInt(column_id, 10));
+            idx++;
+        }
+
+        // Assignee filter
+        if (assignee_id) {
+            whereClauses.push(`c.assignee_id = $${idx}`);
+            params.push(parseInt(assignee_id, 10));
+            idx++;
+        }
+
+        // Tag filter — join through card_tag_map + card_tags
+        let tagJoin = '';
+        if (tag) {
+            tagJoin = `INNER JOIN card_tag_map ctm ON ctm.card_id = c.id INNER JOIN card_tags ct ON ct.id = ctm.tag_id`;
+            whereClauses.push(`ct.slug = $${idx}`);
+            params.push(tag.toLowerCase());
+            idx++;
+        }
+
+        // Due date filters
+        if (due_before) {
+            whereClauses.push(`c.due_date <= $${idx}`);
+            params.push(new Date(due_before));
+            idx++;
+        }
+
+        if (overdue === 'true') {
+            whereClauses.push(`c.due_date < NOW()`);
+            whereClauses.push(`c.due_date IS NOT NULL`);
+        }
+
+        if (status === 'overdue') {
+            whereClauses.push(`c.due_date < NOW()`);
+            whereClauses.push(`c.due_date IS NOT NULL`);
+        } else if (status === 'due_week') {
+            whereClauses.push(`c.due_date >= NOW() AND c.due_date <= NOW() + INTERVAL '7 days'`);
+        } else if (status === 'no_due') {
+            whereClauses.push(`c.due_date IS NULL`);
+        }
+
+        // Build final WHERE clause
+        const activeClauses = whereClauses.filter(c => c.length > 0);
+        const whereSql = activeClauses.length ? `WHERE ${activeClauses.join(' AND ')}` : '';
+
+        const query = `
+            SELECT DISTINCT c.*, o.username AS owner_username, a.username AS assignee_username,
+                    CASE WHEN c.due_date IS NOT NULL AND c.due_date < NOW() THEN true ELSE false END AS is_overdue
+            FROM cards c
+            LEFT JOIN users o ON o.id = c.owner_id
+            LEFT JOIN users a ON a.id = c.assignee_id
+            ${tagJoin}
+            ${whereSql}
+            ORDER BY c.column_id, c.position_in_column
+        `;
 
         const result = await req.db.query(query, params);
         res.json(result.rows);
@@ -108,7 +194,8 @@ router.get('/:id', async (req, res) => {
         const result = await req.db.query(
             `SELECT c.*,
                     o.username AS owner_username,
-                    a.username AS assignee_username
+                    a.username AS assignee_username,
+                    CASE WHEN c.due_date IS NOT NULL AND c.due_date < NOW() THEN true ELSE false END AS is_overdue
              FROM cards c
              LEFT JOIN users o ON o.id = c.owner_id
              LEFT JOIN users a ON a.id = c.assignee_id
@@ -149,6 +236,7 @@ router.post('/', async (req, res) => {
         position_in_column,
         assignee_id,
         visibility,
+        due_date,
     } = req.body;
 
     if (!title?.trim()) {
@@ -160,9 +248,19 @@ router.post('/', async (req, res) => {
     if (priority && !VALID_PRIORITIES.has(priority)) {
         return res.status(400).json({ error: 'priority must be critical, high, medium, low, or minimal' });
     }
-    if (visibility && !VALID_VISIBILITY.has(visibility)) {
-        return res.status(400).json({ error: 'visibility must be public or private' });
-    }
+        if (visibility && !VALID_VISIBILITY.has(visibility)) {
+            return res.status(400).json({ error: 'visibility must be public or private' });
+        }
+
+        // Validate due_date if provided
+        let parsedDueDate = null;
+        const body_due_date = req.body.due_date;
+        if (body_due_date) {
+            parsedDueDate = new Date(body_due_date);
+            if (Number.isNaN(parsedDueDate.getTime())) {
+                return res.status(400).json({ error: 'due_date must be a valid ISO date string' });
+            }
+        }
 
     // Resolve assignee_username to assignee_id if provided
     let resolvedAssigneeId = assignee_id;
@@ -208,8 +306,8 @@ router.post('/', async (req, res) => {
         const result = await req.db.query(
             `INSERT INTO cards
                (title, description, priority, column_id, position_in_column,
-                owner_id, assignee_id, visibility)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                owner_id, assignee_id, visibility, due_date)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
              RETURNING *`,
             [
                 title.trim(),
@@ -220,6 +318,7 @@ router.post('/', async (req, res) => {
                 req.user.id,
                 resolvedAssigneeId || null,
                 visibility  || 'public',
+                parsedDueDate,
             ]
         );
 
@@ -276,8 +375,21 @@ router.put('/:id', async (req, res) => {
             }
         }
 
+        // Validate due_date if provided in update
+        let parsedDueDate = null;
+        if ('due_date' in updates) {
+            if (updates.due_date === null || updates.due_date === '') {
+                parsedDueDate = null;  // explicitly clear
+            } else {
+                parsedDueDate = new Date(updates.due_date);
+                if (Number.isNaN(parsedDueDate.getTime())) {
+                    return res.status(400).json({ error: 'due_date must be a valid ISO date string or null' });
+                }
+            }
+        }
+
         const ALLOWED = ['title', 'description', 'priority', 'column_id',
-                         'position_in_column', 'assignee_id', 'visibility'];
+                         'position_in_column', 'assignee_id', 'visibility', 'due_date'];
 
         const fields = [];
         const values = [];
@@ -286,7 +398,9 @@ router.put('/:id', async (req, res) => {
         for (const key of ALLOWED) {
             if (key in updates) {
                 fields.push(`${key} = $${idx++}`);
-                values.push(key === 'assignee_id' ? (resolvedAssigneeId || null) : updates[key]);
+                values.push(key === 'assignee_id' ? (resolvedAssigneeId || null)
+                              : key === 'due_date' ? parsedDueDate
+                              : updates[key]);
             }
         }
 
@@ -839,6 +953,423 @@ router.get('/:id/activity', async (req, res) => {
     } catch (err) {
         console.error('Activity fetch error:', err);
         res.status(500).json({ error: 'Server error fetching activity' });
+    }
+});
+
+// ===========================================================================
+// CLONING
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// POST /api/cards/:id/clone  — duplicate a card with all metadata and tags
+// ---------------------------------------------------------------------------
+router.post('/:id/clone', async (req, res) => {
+    const { id: userId, role } = req.user;
+
+    try {
+        // Fetch source card
+        const srcResult = await req.db.query('SELECT * FROM cards WHERE id = $1', [req.params.id]);
+        const srcCard = srcResult.rows[0];
+        if (!srcCard) return res.status(404).json({ error: 'Source card not found' });
+
+        // Visibility check on source
+        if (!canView(srcCard, userId, role)) {
+            return res.status(403).json({ error: 'Access denied to source card' });
+        }
+
+        // Verify the target column exists (clone stays in same column)
+        const colCheck = await req.db.query('SELECT id, name, wip_limit FROM columns WHERE id = $1', [srcCard.column_id]);
+        if (!colCheck.rows[0]) {
+            return res.status(404).json({ error: 'Target column not found' });
+        }
+
+        // Enforce WIP limit
+        if (colCheck.rows[0].wip_limit !== null) {
+            const wipCheck = await req.db.query(
+                'SELECT COUNT(*) AS cnt FROM cards WHERE column_id = $1',
+                [srcCard.column_id]
+            );
+            if (parseInt(wipCheck.rows[0].cnt, 10) >= colCheck.rows[0].wip_limit) {
+                return res.status(409).json({ error: `Column WIP limit (${colCheck.rows[0].wip_limit}) reached` });
+            }
+        }
+
+        // Determine position at end of column
+        const maxPos = await req.db.query(
+            'SELECT COALESCE(MAX(position_in_column), -1) + 1 AS next_pos FROM cards WHERE column_id = $1',
+            [srcCard.column_id]
+        );
+        const pos = maxPos.rows[0].next_pos;
+
+        // Create cloned card
+        const cloneTitle = `Clone of: ${srcCard.title}`;
+        const result = await req.db.query(
+            `INSERT INTO cards
+               (title, description, priority, column_id, position_in_column,
+                owner_id, assignee_id, visibility, due_date)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+             RETURNING *`,
+            [
+                cloneTitle,
+                srcCard.description || '',
+                srcCard.priority    || 'medium',
+                srcCard.column_id,
+                pos,
+                userId,       // cloner becomes owner
+                srcCard.assignee_id,
+                srcCard.visibility || 'public',
+                srcCard.due_date,
+            ]
+        );
+
+        const clone = result.rows[0];
+
+        // Copy tags from source card to clone (if tag system tables exist)
+        try {
+            const tagsResult = await req.db.query(
+                `SELECT ct.id AS tag_id FROM card_tag_map ctm
+                 JOIN card_tags ct ON ct.id = ctm.tag_id
+                 WHERE ctm.card_id = $1`,
+                [srcCard.id]
+            );
+            for (const { tag_id } of tagsResult.rows) {
+                await req.db.query(
+                    `INSERT INTO card_tag_map (card_id, tag_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+                    [clone.id, tag_id]
+                );
+            }
+        } catch (tagErr) {
+            // Tag tables might not exist yet — non-fatal
+            console.debug('Card clone: tag copy skipped:', tagErr.message);
+        }
+
+        // Log activity on both source and clone
+        logActivity(req.db, srcCard.id, userId, 'cloned', { cloned_card_id: clone.id });
+        logActivity(req.db, clone.id, userId, 'created', { from_clone_of: srcCard.id, column: colCheck.rows[0].name });
+
+        audit(req.db, 'card_clone', userId, req.ip, { source_id: srcCard.id, cloned_id: clone.id });
+
+        // Return the new card with is_overdue
+        const enrichedClone = { ...clone };
+        if (enrichedClone.due_date) {
+            enrichedClone.is_overdue = new Date(enrichedClone.due_date) < new Date();
+        } else {
+            enrichedClone.is_overdue = false;
+        }
+
+        res.status(201).json(enrichedClone);
+    } catch (err) {
+        console.error('Card clone error:', err);
+        res.status(500).json({ error: 'Server error cloning card' });
+    }
+});
+
+// ===========================================================================
+// BULK OPERATIONS
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// PATCH /api/cards/bulk/move  — move multiple cards to a column at once
+// Body: { card_ids: [uuid...], column_id: number }
+// ---------------------------------------------------------------------------
+router.patch('/bulk/move', async (req, res) => {
+    const { id: userId, role } = req.user;
+    const { card_ids, column_id } = req.body;
+
+    if (!Array.isArray(card_ids) || card_ids.length === 0) {
+        return res.status(400).json({ error: 'card_ids must be a non-empty array' });
+    }
+    if (column_id === undefined) {
+        return res.status(400).json({ error: 'column_id is required' });
+    }
+
+    try {
+        // Verify target column exists
+        const colCheck = await req.db.query('SELECT id, name, wip_limit FROM columns WHERE id = $1', [column_id]);
+        if (!colCheck.rows[0]) {
+            return res.status(404).json({ error: 'Target column not found' });
+        }
+
+        // Fetch source cards
+        const cardsResult = await req.db.query(
+            'SELECT id, owner_id, visibility FROM cards WHERE id = ANY($1)',
+            [card_ids]
+        );
+
+        if (cardsResult.rows.length !== card_ids.length) {
+            const foundIds = new Set(cardsResult.rows.map(r => String(r.id)));
+            const missing = card_ids.filter(id => !foundIds.has(String(id)));
+            return res.status(404).json({ error: `Cards not found: ${missing.join(', ')}` });
+        }
+
+        // Check access (owner or admin for each)
+        const inaccessible = cardsResult.rows.filter(c => role !== 'admin' && c.owner_id !== userId);
+        if (inaccessible.length > 0) {
+            return res.status(403).json({ error: `Access denied for ${inaccessible.length} card(s)` });
+        }
+
+        // Get next position in target column
+        const maxPos = await req.db.query(
+            'SELECT COALESCE(MAX(position_in_column), -1) + 1 AS next_pos FROM cards WHERE column_id = $1',
+            [column_id]
+        );
+
+        let pos = maxPos.rows[0].next_pos;
+        const movedCards = [];
+
+        for (const card of cardsResult.rows) {
+            await req.db.query(
+                `UPDATE cards SET column_id = $1, position_in_column = $2, updated_at = NOW() WHERE id = $3`,
+                [column_id, pos, card.id]
+            );
+            movedCards.push({ id: card.id, new_position: pos });
+            pos++;
+        }
+
+        logActivity(req.db, movedCards[0].id, userId, 'bulk_moved', {
+            column_id,
+            cards_count: movedCards.length,
+        });
+
+        audit(req.db, 'card_bulk_move', userId, req.ip, { card_ids, column_id });
+
+        res.json({ success: true, moved: movedCards.length });
+    } catch (err) {
+        console.error('Bulk move error:', err);
+        res.status(500).json({ error: 'Server error during bulk move' });
+    }
+});
+
+// ---------------------------------------------------------------------------
+// PATCH /api/cards/bulk/assign  — reassign multiple cards to a new assignee
+// Body: { card_ids: [uuid...], assignee_id: number|null }
+// ---------------------------------------------------------------------------
+router.patch('/bulk/assign', async (req, res) => {
+    const { id: userId, role } = req.user;
+    const { card_ids, assignee_id } = req.body;
+
+    if (!Array.isArray(card_ids) || card_ids.length === 0) {
+        return res.status(400).json({ error: 'card_ids must be a non-empty array' });
+    }
+    if (assignee_id === undefined) {
+        return res.status(400).json({ error: 'assignee_id is required (pass null to unassign)' });
+    }
+
+    try {
+        // Resolve assignee_username to id if provided via body
+        let resolvedAssigneeId = assignee_id;
+        const { assignee_username } = req.body;
+        if (assignee_username && !resolvedAssigneeId) {
+            const userCheck = await req.db.query('SELECT id FROM users WHERE username = $1', [assignee_username.trim()]);
+            if (userCheck.rows[0]) {
+                resolvedAssigneeId = userCheck.rows[0].id;
+            }
+        }
+
+        // Fetch source cards
+        const cardsResult = await req.db.query(
+            'SELECT id, owner_id, visibility FROM cards WHERE id = ANY($1)',
+            [card_ids]
+        );
+
+        if (cardsResult.rows.length !== card_ids.length) {
+            const foundIds = new Set(cardsResult.rows.map(r => String(r.id)));
+            const missing = card_ids.filter(id => !foundIds.has(String(id)));
+            return res.status(404).json({ error: `Cards not found: ${missing.join(', ')}` });
+        }
+
+        // Check access
+        const inaccessible = cardsResult.rows.filter(c => role !== 'admin' && c.owner_id !== userId);
+        if (inaccessible.length > 0) {
+            return res.status(403).json({ error: `Access denied for ${inaccessible.length} card(s)` });
+        }
+
+        const updatedCards = [];
+        for (const card of cardsResult.rows) {
+            await req.db.query(
+                `UPDATE cards SET assignee_id = $1, updated_at = NOW() WHERE id = $2`,
+                [resolvedAssigneeId || null, card.id]
+            );
+            updatedCards.push(card.id);
+            logActivity(req.db, card.id, userId, 'bulk_assigned', { new_assignee_id: resolvedAssigneeId });
+        }
+
+        audit(req.db, 'card_bulk_assign', userId, req.ip, { card_ids, assignee_id: resolvedAssigneeId });
+
+        res.json({ success: true, updated: updatedCards.length });
+    } catch (err) {
+        console.error('Bulk assign error:', err);
+        res.status(500).json({ error: 'Server error during bulk assign' });
+    }
+});
+
+// ---------------------------------------------------------------------------
+// DELETE /api/cards/bulk  — delete selected cards in one call
+// Body: { card_ids: [uuid...] }
+// ---------------------------------------------------------------------------
+router.delete('/bulk', async (req, res) => {
+    const { id: userId, role } = req.user;
+    const { card_ids } = req.body;
+
+    if (!Array.isArray(card_ids) || card_ids.length === 0) {
+        return res.status(400).json({ error: 'card_ids must be a non-empty array' });
+    }
+
+    try {
+        // Fetch source cards for access check + title collection
+        const cardsResult = await req.db.query(
+            'SELECT id, owner_id, visibility, title FROM cards WHERE id = ANY($1)',
+            [card_ids]
+        );
+
+        if (cardsResult.rows.length !== card_ids.length) {
+            const foundIds = new Set(cardsResult.rows.map(r => String(r.id)));
+            const missing = card_ids.filter(id => !foundIds.has(String(id)));
+            return res.status(404).json({ error: `Cards not found: ${missing.join(', ')}` });
+        }
+
+        // Check access (owner or admin for each)
+        const inaccessible = cardsResult.rows.filter(c => role !== 'admin' && c.owner_id !== userId);
+        if (inaccessible.length > 0) {
+            return res.status(403).json({ error: `Access denied for ${inaccessible.length} card(s)` });
+        }
+
+        await req.db.query('DELETE FROM cards WHERE id = ANY($1)', [card_ids]);
+
+        audit(req.db, 'card_bulk_delete', userId, req.ip, { card_ids, count: cardsResult.rows.length });
+
+        res.json({ success: true, deleted: cardsResult.rows.length });
+    } catch (err) {
+        console.error('Bulk delete error:', err);
+        res.status(500).json({ error: 'Server error during bulk delete' });
+    }
+});
+
+// ===========================================================================
+// TAG ENDPOINTS
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// GET /api/cards/tags  — list all distinct tags in use (alphabetical)
+// Note: must be registered BEFORE any :id parametric routes.
+// It is already placed before this block; the route '/tags' will match literally.
+// ---------------------------------------------------------------------------
+router.get('/tags', async (req, res) => {
+    try {
+        const result = await req.db.query(
+            `SELECT ct.id, ct.name, ct.slug, COUNT(ctm.card_id) AS card_count
+             FROM card_tags ct
+             INNER JOIN card_tag_map ctm ON ctm.tag_id = ct.id
+             GROUP BY ct.id, ct.name, ct.slug
+             ORDER BY ct.name ASC`
+        );
+        res.json(result.rows);
+    } catch (err) {
+        console.error('Tags list error:', err);
+        res.status(500).json({ error: 'Server error fetching tags' });
+    }
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/cards/:id/tags  — add tag slugs to a card (upserts into card_tags)
+// Body: { tags: ['bug', 'feature'] }
+// ---------------------------------------------------------------------------
+router.post('/:id/tags', async (req, res) => {
+    const { id: userId, role } = req.user;
+    const { tags } = req.body;
+
+    if (!Array.isArray(tags) || tags.length === 0) {
+        return res.status(400).json({ error: 'tags must be a non-empty array of strings' });
+    }
+
+    try {
+        // Verify card exists and user can access it
+        const cardResult = await req.db.query('SELECT * FROM cards WHERE id = $1', [req.params.id]);
+        const card = cardResult.rows[0];
+        if (!card) return res.status(404).json({ error: 'Card not found' });
+        if (!canView(card, userId, role)) {
+            return res.status(403).json({ error: 'Access denied' });
+        }
+
+        // Normalize slugs (lowercase, trimmed)
+        const normalizedTags = tags.map(t => String(t).toLowerCase().trim());
+        if (!normalizedTags.every(t => t.length > 0)) {
+            return res.status(400).json({ error: 'Each tag must be a non-empty string' });
+        }
+
+        // Upsert tags into card_tags table, then map them to the card
+        const addedTagIds = [];
+        for (const slug of normalizedTags) {
+            const name = slug.charAt(0).toUpperCase() + slug.slice(1);  // capitalize first letter for display
+            const tagResult = await req.db.query(
+                `INSERT INTO card_tags (name, slug) VALUES ($1, $2) ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name RETURNING id`,
+                [name, slug]
+            );
+            addedTagIds.push(tagResult.rows[0].id);
+        }
+
+        // Map tags to card (ON CONFLICT handles duplicates silently)
+        for (const tagId of addedTagIds) {
+            await req.db.query(
+                `INSERT INTO card_tag_map (card_id, tag_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+                [req.params.id, tagId]
+            );
+        }
+
+        // Fetch updated tags for this card
+        const currentTags = await req.db.query(
+            `SELECT ct.* FROM card_tag_map ctm
+             JOIN card_tags ct ON ct.id = ctm.tag_id
+             WHERE ctm.card_id = $1 ORDER BY ct.name`,
+            [req.params.id]
+        );
+
+        logActivity(req.db, req.params.id, userId, 'tags_added', { tags: normalizedTags });
+
+        res.json({ success: true, tags: currentTags.rows });
+    } catch (err) {
+        console.error('Card add tags error:', err);
+        res.status(500).json({ error: 'Server error adding tags' });
+    }
+});
+
+// ---------------------------------------------------------------------------
+// DELETE /api/cards/:id/tags/:tagId  — remove a specific tag from a card
+// ---------------------------------------------------------------------------
+router.delete('/:id/tags/:tagId', async (req, res) => {
+    const { id: userId, role } = req.user;
+
+    try {
+        // Verify card exists and user can access it
+        const cardResult = await req.db.query('SELECT * FROM cards WHERE id = $1', [req.params.id]);
+        const card = cardResult.rows[0];
+        if (!card) return res.status(404).json({ error: 'Card not found' });
+        if (!canView(card, userId, role)) {
+            return res.status(403).json({ error: 'Access denied' });
+        }
+
+        // Check tag exists and is mapped to this card
+        const mapResult = await req.db.query(
+            `SELECT ct.id, ct.name, ct.slug FROM card_tag_map ctm
+             JOIN card_tags ct ON ct.id = ctm.tag_id
+             WHERE ctm.card_id = $1 AND ctm.tag_id = $2`,
+            [req.params.id, parseInt(req.params.tagId, 10)]
+        );
+
+        if (!mapResult.rows[0]) {
+            return res.status(404).json({ error: 'Tag not found on this card' });
+        }
+
+        const removedTag = mapResult.rows[0];
+
+        await req.db.query('DELETE FROM card_tag_map WHERE card_id = $1 AND tag_id = $2', [req.params.id, parseInt(req.params.tagId, 10)]);
+
+        logActivity(req.db, req.params.id, userId, 'tag_removed', { tag: removedTag.slug });
+
+        res.json({ success: true, removed_tag: removedTag });
+    } catch (err) {
+        console.error('Card remove tag error:', err);
+        res.status(500).json({ error: 'Server error removing tag' });
     }
 });
 

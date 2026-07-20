@@ -73,6 +73,7 @@ CREATE TABLE IF NOT EXISTS cards (
     -- 'public'  = visible to every authenticated user on the board
     -- 'private' = visible only to owner, assignee, and admins
     visibility        visibility   NOT NULL DEFAULT 'public',
+    due_date          TIMESTAMPTZ  DEFAULT NULL,
     created_at        TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     updated_at        TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
@@ -129,8 +130,26 @@ CREATE TABLE IF NOT EXISTS card_attachments (
     created_at         TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_attachments_card ON card_attachments(card_id);
-CREATE INDEX IF NOT EXISTS idx_attachments_user ON card_attachments(user_id);
+-- ---------------------------------------------------------------------------
+-- Card tags  (many-to-many via junction table)
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS card_tags (
+    id          SERIAL PRIMARY KEY,
+    name        VARCHAR(30) NOT NULL COLLATE "C",
+    slug        VARCHAR(30) UNIQUE NOT NULL COLLATE "C"
+);
+
+CREATE TABLE IF NOT EXISTS card_tag_map (
+    card_id     UUID         NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+    tag_id      INT          NOT NULL REFERENCES card_tags(id) ON DELETE CASCADE,
+    created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (card_id, tag_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_attachments_card   ON card_attachments(card_id);
+CREATE INDEX IF NOT EXISTS idx_attachments_user   ON card_attachments(user_id);
+CREATE INDEX IF NOT EXISTS idx_card_tag_map_card  ON card_tag_map(card_id);
+CREATE INDEX IF NOT EXISTS idx_card_tag_map_tag   ON card_tag_map(tag_id);
 
 -- ---------------------------------------------------------------------------
 -- Indexes
