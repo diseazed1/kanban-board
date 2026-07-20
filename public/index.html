@@ -195,6 +195,41 @@
         .tag-badge:nth-child(8n+7) { background: #e8f6f3; color: #0e6655; }
         .tag-badge:nth-child(8n+8) { background: #fdebd0; color: #a04000; }
 
+        /* Tag delete button */
+        .tag-delete-btn {
+            cursor: pointer; margin-left: 4px; color: #e74c3c;
+            font-weight: 700; border: none; background: none; font-size: 0.7rem;
+        }
+
+        /* Bulk action bar */
+        #bulkActionBar {
+            display: none; padding: 0.5rem 1.5rem; background: #3498db; color: white;
+            align-items: center; gap: 0.75rem; font-size: 0.85rem;
+        }
+        #bulkActionBar.visible { display: flex; }
+        #bulkActionBar .btn { padding: 0.3rem 0.75rem; font-size: 0.8rem; }
+        .bulk-select-toggle {
+            margin-left: auto; display: flex; align-items: center;
+            gap: 0.4rem; font-size: 0.8rem; color: #7f8c8d; cursor: pointer;
+        }
+        .card-checkbox { position: absolute; top: 6px; left: 6px; z-index: 2; display: none; }
+        .bulk-mode .card-checkbox { display: block; }
+
+        /* Due date badge */
+        .due-date-badge {
+            display: inline-block; font-size: 0.65rem; padding: 1px 5px;
+            border-radius: 3px; background: #fef9e7; color: #b7950b;
+            font-weight: 700; margin-left: 4px;
+        }
+        .due-date-badge.overdue { background: #e74c3c; color: white; }
+
+        /* Notification pref toggles */
+        .notif-pref-row {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 0.6rem 0; border-bottom: 1px solid #eee; font-size: 0.85rem;
+        }
+        .notif-pref-desc { color: #999; font-size: 0.75rem; display: block; }
+
         /* Subtask list styles */
         .subtask-list { list-style: none; padding: 0; margin: 6px 0 0 0; }
         .subtask-item {
@@ -391,6 +426,7 @@
         <h1>Kanban Board</h1>
         <div class="header-actions">
             <span id="user-badge"></span>
+            <button id="showNotifBtn" class="btn btn-secondary btn-sm">🔔 Notifs</button>
             <button id="changePasswordBtn" class="btn btn-warning">Change Password</button>
             <a id="adminLink" href="/admin.html" class="btn btn-danger" style="display:none;">Admin</a>
             <button id="logoutBtn" class="btn btn-secondary">Logout</button>
@@ -399,6 +435,7 @@
 
     <div class="board-toolbar">
         <button id="addCardBtn" class="btn btn-primary">+ Add Card</button>
+        <label class="bulk-select-toggle"><input type="checkbox" id="bulkModeToggle"> Bulk Select</label>
         <div class="search-filter-bar">
             <input type="text" id="searchInput" placeholder="Search cards...">
             <select id="filterPriority">
@@ -427,7 +464,19 @@
     <!-- ADMIN NAV LINKS (shown only to admins) -->
     <nav id="adminNav" style="display:none;padding:0.75rem 1rem;background:#f8f9fa;border-bottom:1px solid #ddd;font-size:0.85rem;">
         <a href="#" id="adminDashboardLink" style="color:#2c3e50;text-decoration:none;margin-right:1.5rem;">📊 Analytics</a>
-        <a href="#" id="adminWebhooksLink" style="color:#2c3e50;text-decoration:none;">🔗 Webhooks</a>
+        <a href="#" id="adminWebhooksLink" style="color:#2c3e50;text-decoration:none;margin-right:1.5rem;">🔗 Webhooks</a>
+        <a href="#" id="adminImportLink" style="color:#2c3e50;text-decoration:none;margin-right:1.5rem;">📥 Import CSV</a>
+    </nav>
+
+    <!-- Bulk Action Bar -->
+    <div id="bulkActionBar">
+        <span><strong id="bulkSelectedCount">0</strong> selected</span>
+        <select id="bulkMoveColumn" style="padding:3px 6px;border-radius:4px;font-size:0.8rem;"></select>
+        <button class="btn btn-success btn-sm" id="bulkMoveBtn">Move</button>
+        <input type="text" id="bulkAssignInput" placeholder="Assign to..." style="padding:3px 6px;border-radius:4px;font-size:0.8rem;width:110px;border:1px solid #ccc;">
+        <button class="btn btn-warning btn-sm" id="bulkAssignBtn">Assign</button>
+        <button class="btn btn-danger btn-sm" id="bulkDeleteBtn">Delete All</button>
+    </div>
     </nav>
 </div>
 
@@ -469,6 +518,14 @@
             <div class="form-group">
                 <label for="cardAssignee">Assignee (username)</label>
                 <input type="text" id="cardAssignee" name="assignee" placeholder="Leave blank for unassigned">
+            </div>
+            <div class="form-group">
+                <label for="cardDueDate">Due Date</label>
+                <input type="datetime-local" id="cardDueDate" name="due_date">
+            </div>
+            <div class="form-group">
+                <label for="cardDueDate">Due Date</label>
+                <input type="datetime-local" id="cardDueDate" name="due_date">
             </div>
             <div class="visibility-toggle">
                 <label class="toggle-switch">
@@ -574,6 +631,48 @@
     <div class="modal-footer">
         <button type="button" class="btn btn-secondary" id="pwCancelBtn">Cancel</button>
         <button type="button" class="btn btn-primary" id="pwSaveBtn">Update Password</button>
+    </div>
+</dialog>
+
+<!-- CSV IMPORT MODAL -->
+<dialog id="csvImportModal" style="width:500px;">
+    <div class="modal-header">
+        <h2>📥 Import Cards (CSV)</h2>
+        <button class="modal-close" id="csvClose">&times;</button>
+    </div>
+    <div class="modal-body">
+        <p style="font-size:0.8rem;color:#555;margin-bottom:1rem;">
+            Upload a CSV with columns: <code>title</code>, <code>description</code>, <code>priority</code>,
+            <code>column_id</code>, <code>visibility</code>, <code>assignee_username</code>.<br>
+            Admin only. All rows processed in a single transaction.
+        </p>
+        <div id="csv-error" class="alert alert-error" style="display:none;"></div>
+        <div id="csv-success" class="alert alert-success" style="display:none;"></div>
+        <div class="form-group">
+            <label for="csvFileInput">CSV File</label>
+            <input type="file" id="csvFileInput" accept=".csv,text/csv" style="font-size:0.85rem;">
+        </div>
+    </div>
+    <div class="modal-footer">
+        <button class="btn btn-secondary" id="csvCancelBtn">Cancel</button>
+        <button class="btn btn-primary" id="csvUploadBtn">Import</button>
+    </div>
+</dialog>
+
+<!-- NOTIFICATION PREFERENCES MODAL -->
+<dialog id="notifPrefsModal" style="width:500px;">
+    <div class="modal-header">
+        <h2>🔔 Notification Preferences</h2>
+        <button class="modal-close" id="notifClose">&times;</button>
+    </div>
+    <div class="modal-body">
+        <div id="notif-error" class="alert alert-error" style="display:none;"></div>
+        <div id="notif-success" class="alert alert-success" style="display:none;">Saved!</div>
+        <div id="notifPrefsList"></div>
+    </div>
+    <div class="modal-footer">
+        <button class="btn btn-secondary" id="notifCancelBtn">Cancel</button>
+        <button class="btn btn-primary" id="notifSaveBtn">Save</button>
     </div>
 </dialog>
 
@@ -747,21 +846,25 @@ function renderCard(card, visible) {
 
     return `
     <div class="card priority-${card.priority} ${visible ? '' : 'filtered-out'}"
-         draggable="${isOwner ? 'true' : 'false'}"
+         draggable="${isOwner && !bulkMode ? 'true' : 'false'}"
          data-card-id="${card.id}"
          data-owner-id="${card.owner_id}"
          data-position="${card.position_in_column}">
+        <input type="checkbox" class="card-checkbox" data-card-id="${card.id}" ${bulkSelected.has(card.id) ? 'checked' : ''}>
         <div class="card-title">${escapeHtml(card.title)}</div>
         <div class="card-meta">
             <span>
                 <span class="card-priority-tag ${card.priority}">${card.priority}</span>
                 <span class="visibility-badge ${visClass}">${visText}</span>
+                ${card.due_date ? `<span class="due-date-badge ${new Date(card.due_date) < new Date() ? 'overdue' : ''}" title="${card.due_date}">📅 ${new Date(card.due_date).toLocaleDateString(undefined, {month:'short', day:'numeric'})}</span>` : ''}
             </span>
-            <span>${escapeHtml(card.owner_username || '')}${card.assignee_username ? ' &rarr; ' + escapeHtml(card.assignee_username) : ''}</span>
+            <span>${escapeHtml(card.assignee_username || card.owner_username || '')}</span>
         </div>
+        ${card.tags?.length ? `<div class="tag-badges">${card.tags.map(t => `<span class="tag-badge" title="${escapeHtml(t.name)}">${escapeHtml(t.slug)}</span>`).join('')}</div>` : ''}
         <div class="card-actions">
             <button class="btn btn-secondary btn-sm card-detail-btn" data-card-id="${card.id}">Details</button>
             ${isOwner ? `
+            <button class="btn btn-secondary btn-sm card-clone-btn" data-card-id="${card.id}" title="Clone this card">📋 Clone</button>
             <button class="btn btn-primary btn-sm card-edit-btn" data-card-id="${card.id}">Edit</button>
             <button class="btn btn-danger btn-sm card-delete-btn" data-card-id="${card.id}">Delete</button>
             ` : ''}
@@ -786,6 +889,7 @@ const cardDescInput  = document.getElementById('cardDescription');
 const cardPrioInput  = document.getElementById('cardPriority');
 const cardColInput   = document.getElementById('cardColumn');
 const cardAssInput   = document.getElementById('cardAssignee');
+const cardDueInput   = document.getElementById('cardDueDate');
 const cardPubInput   = document.getElementById('cardPublished');
 const visLabelEl     = document.getElementById('visibilityLabel');
 const deleteBtn      = document.getElementById('deleteCardBtn');
@@ -809,7 +913,7 @@ function populateColumnSelect(selectedId) {
 function openNewModal() {
     document.getElementById('modalTitle').textContent = 'New Card';
     cardIdInput.value = ''; cardTitleInput.value = ''; cardDescInput.value = '';
-    cardPrioInput.value = 'medium'; cardAssInput.value = '';
+    cardPrioInput.value = 'medium'; cardAssInput.value = ''; cardDueInput.value = '';
     cardPubInput.checked = true; deleteBtn.style.display = 'none';
     modalErrEl.style.display = 'none';
     populateColumnSelect(columns[0]?.id);
@@ -826,6 +930,7 @@ function openEditModal(cardId) {
     cardPrioInput.value = card.priority;
     cardAssInput.value = card.assignee_username || '';
     cardPubInput.checked = card.visibility !== 'private';
+    cardDueInput.value = card.due_date ? new Date(card.due_date).toISOString().slice(0, 16) : '';
     deleteBtn.style.display = 'inline-block';
     modalErrEl.style.display = 'none';
     populateColumnSelect(card.column_id);
@@ -853,6 +958,7 @@ document.getElementById('saveCardBtn').addEventListener('click', async () => {
         priority: cardPrioInput.value,
         column_id: parseInt(cardColInput.value, 10),
         assignee_username: cardAssInput.value.trim() || null,
+        due_date: cardDueInput.value || null,
         visibility,
     };
     if (!payload.title) { modalErrEl.textContent = 'Title is required.'; modalErrEl.style.display = 'block'; return; }
@@ -1124,8 +1230,9 @@ async function renderCardTags(cardId) {
         if (cardTags.length === 0) {
             container.innerHTML = '<span style="font-size:0.8rem;color:#999;">No tags yet.</span>';
         } else {
-            container.innerHTML = cardTags.map(t =>
-                `<span class="tag-badge" title="${escapeHtml(t.name)}">${escapeHtml(t.slug)}</span>`
+            container.innerHTML = cardTags.map(t => `
+                <span class="tag-badge" title="${escapeHtml(t.name)}">${escapeHtml(t.slug)}</span>
+                <button class="tag-remove-btn" data-tag-id="${t.id}" title="Remove tag">✕</button>`
             ).join('');
         }
     } catch (err) {
@@ -1516,6 +1623,184 @@ function escapeHtml(text) {
         }
     } catch (_) {}
 })();
+
+// ============================================================================
+// Bulk Mode
+// ============================================================================
+let bulkMode = false;
+document.getElementById('bulkModeToggle')?.addEventListener('change', () => {
+    bulkMode = !bulkMode;
+    document.getElementById('kanban-board').classList.toggle('bulk-mode', bulkMode);
+});
+
+function updateBulkBar() {
+    const bar = document.getElementById('bulkActionBar');
+    const count = [...document.querySelectorAll('.card-checkbox:checked')].length;
+    document.getElementById('bulkSelectedCount').textContent = count;
+    bar.classList.toggle('visible', count > 0);
+    const sel = document.getElementById('bulkMoveColumn');
+    sel.innerHTML = columns.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+}
+
+function getCheckedCardIds() {
+    return [...document.querySelectorAll('.card-checkbox:checked')].map(cb => parseInt(cb.dataset.cardId, 10));
+}
+
+// Board click delegation: clone + checkboxes (append to existing handler)
+document.getElementById('kanban-board').addEventListener('click', async (e) => {
+    const cloneBtn = e.target.closest('.card-clone-btn');
+    if (cloneBtn) {
+        e.stopPropagation();
+        try { await api('POST', `/api/cards/${cloneBtn.dataset.cardId}/clone`); await loadBoard(); }
+        catch (err) { alert(`Clone: ${err.message}`); }
+        return;
+    }
+    const cb = e.target.closest('.card-checkbox');
+    if (cb) {
+        e.stopPropagation();
+        updateBulkBar();
+        return;
+    }
+});
+
+// Bulk move
+document.getElementById('bulkMoveBtn').addEventListener('click', async () => {
+    const ids = getCheckedCardIds();
+    if (ids.length === 0) return alert('Select at least one card.');
+    try {
+        await api('PATCH', '/api/cards/bulk/move', { card_ids: ids, column_id: parseInt(document.getElementById('bulkMoveColumn').value, 10) });
+        bulkMode = false; document.getElementById('bulkModeToggle').checked = false;
+        document.getElementById('kanban-board').classList.remove('bulk-mode'); updateBulkBar();
+        await loadBoard();
+    } catch (err) { alert(`Bulk move: ${err.message}`); }
+});
+
+// Bulk assign
+document.getElementById('bulkAssignBtn').addEventListener('click', async () => {
+    const ids = getCheckedCardIds();
+    if (ids.length === 0) return alert('Select at least one card.');
+    const username = document.getElementById('bulkAssignInput').value.trim();
+    try {
+        await api('PATCH', '/api/cards/bulk/assign', { card_ids: ids, assignee_username: username || null });
+        bulkMode = false; document.getElementById('bulkModeToggle').checked = false;
+        document.getElementById('kanban-board').classList.remove('bulk-mode'); updateBulkBar();
+        await loadBoard();
+    } catch (err) { alert(`Bulk assign: ${err.message}`); }
+});
+
+// Bulk delete
+document.getElementById('bulkDeleteBtn').addEventListener('click', async () => {
+    const ids = getCheckedCardIds();
+    if (ids.length === 0) return alert('Select at least one card.');
+    if (!confirm(`Delete ${ids.length} selected card(s)?`)) return;
+    try {
+        await api('DELETE', '/api/cards/bulk', { card_ids: ids });
+        bulkMode = false; document.getElementById('bulkModeToggle').checked = false;
+        document.getElementById('kanban-board').classList.remove('bulk-mode'); updateBulkBar();
+        await loadBoard();
+    } catch (err) { alert(`Bulk delete: ${err.message}`); }
+});
+
+// ============================================================================
+// CSV Import Modal
+// ============================================================================
+document.getElementById('adminImportLink')?.addEventListener('click', async (e) => {
+    e.preventDefault();
+    if (currentUser?.role !== 'admin') return;
+    document.getElementById('csv-error').style.display = 'none';
+    document.getElementById('csv-success').style.display = 'none';
+    document.getElementById('csvFileInput').value = '';
+    document.getElementById('csvImportModal').showModal();
+});
+document.getElementById('csvClose').addEventListener('click', () => document.getElementById('csvImportModal').close());
+document.getElementById('csvCancelBtn').addEventListener('click', () => document.getElementById('csvImportModal').close());
+
+document.getElementById('csvUploadBtn').addEventListener('click', async () => {
+    const fileInput = document.getElementById('csvFileInput');
+    const errEl = document.getElementById('csv-error');
+    const succEl = document.getElementById('csv-success');
+    errEl.style.display = 'none'; succEl.style.display = 'none';
+    if (!fileInput.files[0]) { errEl.textContent = 'Please select a CSV file.'; errEl.style.display = 'block'; return; }
+    try {
+        const formData = new FormData(); formData.append('file', fileInput.files[0]);
+        const res = await fetch('/api/import/csv', { method: 'POST', credentials: 'include', body: formData });
+        if (res.status === 401) { showLogin(); return; }
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+        let msg = 'Import complete.';
+        if (data.summary) msg += ` Created: ${data.summary.created||0} | Skipped: ${data.summary.skipped||0} | Errored: ${data.summary.errored||0}`;
+        succEl.textContent = msg; succEl.style.display = 'block';
+        fileInput.value = ''; await loadBoard();
+    } catch (err) { errEl.textContent = err.message; errEl.style.display = 'block'; }
+});
+
+// ============================================================================
+// Notification Preferences Modal
+// ============================================================================
+document.getElementById('showNotifBtn')?.addEventListener('click', async () => {
+    const errEl = document.getElementById('notif-error');
+    const succEl = document.getElementById('notif-success');
+    errEl.style.display = 'none'; succEl.style.display = 'none';
+    let prefs = {};
+    try { prefs = await api('GET', '/api/cards/notification-prefs').catch(() => ({})); } catch {}
+
+    const fields = [
+        { key: 'card_created', label: 'Card Created', desc: 'When a new card is created' },
+        { key: 'card_updated', label: 'Card Updated', desc: 'When a card is edited' },
+        { key: 'card_assigned', label: 'Card Assigned', desc: 'When you are assigned to a card' },
+        { key: 'card_moved', label: 'Card Moved', desc: 'When a card changes column' },
+        { key: 'card_due_reminder', label: 'Due Date Reminder', desc: 'When a card is due or overdue' },
+        { key: 'comment_added', label: 'New Comment', desc: 'When someone comments on a card' },
+    ];
+    const prefsList = document.getElementById('notifPrefsList');
+    prefsList.innerHTML = fields.map(f => `
+        <div class="notif-pref-row">
+            <div><span class="notif-pref-label">${f.label}</span><span class="notif-pref-desc">${f.desc}</span></div>
+            <label class="toggle-switch" style="flex-shrink:0;">
+                <input type="checkbox" class="notif-toggle" data-key="${f.key}" ${prefs[f.key] ? 'checked' : ''}>
+                <span class="toggle-slider"></span>
+            </label>
+        </div>`).join('');
+
+    const freq = prefs.digest_frequency || 'realtime';
+    prefsList.innerHTML += `
+        <div class="form-group" style="margin-top:1rem;">
+            <label for="notifDigestFreq" style="font-size:0.85rem;font-weight:600;">Digest Frequency</label>
+            <select id="notifDigestFreq" style="width:100%;padding:0.5rem;border:1px solid #ddd;border-radius:6px;margin-top:0.3rem;">
+                <option value="realtime" ${freq==='realtime'?'selected':''}>Real-time</option>
+                <option value="hourly" ${freq==='hourly'?'selected':''}>Hourly digest</option>
+                <option value="daily" ${freq==='daily'?'selected':''}>Daily digest</option>
+            </select>
+        </div>`;
+    document.getElementById('notifPrefsModal').showModal();
+});
+document.getElementById('notifClose').addEventListener('click', () => document.getElementById('notifPrefsModal').close());
+document.getElementById('notifCancelBtn').addEventListener('click', () => document.getElementById('notifPrefsModal').close());
+document.getElementById('notifSaveBtn').addEventListener('click', async () => {
+    const errEl = document.getElementById('notif-error');
+    const succEl = document.getElementById('notif-success');
+    errEl.style.display = 'none'; succEl.style.display = 'none';
+    const payload = {};
+    document.querySelectorAll('.notif-toggle').forEach(cb => { payload[cb.dataset.key] = cb.checked; });
+    payload.digest_frequency = document.getElementById('notifDigestFreq')?.value || 'realtime';
+    try {
+        await api('PUT', '/api/cards/notification-prefs', payload);
+        succEl.textContent = 'Preferences saved!'; succEl.style.display = 'block';
+        setTimeout(() => document.getElementById('notifPrefsModal').close(), 1500);
+    } catch (err) { errEl.textContent = err.message; errEl.style.display = 'block'; }
+});
+
+// ============================================================================
+// Tag deletion in detail modal
+// ============================================================================
+document.getElementById('detailTagBadges')?.addEventListener('click', async (e) => {
+    const btn = e.target.closest('.tag-remove-btn');
+    if (!btn || !detailCardId) return;
+    try {
+        await api('DELETE', `/api/cards/${detailCardId}/tags/${parseInt(btn.dataset.tagId, 10)}`);
+        renderCardTags(detailCardId);
+    } catch (err) { alert(`Tag remove: ${err.message}`); }
+});
 </script>
 </body>
 </html>
