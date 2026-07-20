@@ -523,10 +523,6 @@
                 <label for="cardDueDate">Due Date</label>
                 <input type="datetime-local" id="cardDueDate" name="due_date">
             </div>
-            <div class="form-group">
-                <label for="cardDueDate">Due Date</label>
-                <input type="datetime-local" id="cardDueDate" name="due_date">
-            </div>
             <div class="visibility-toggle">
                 <label class="toggle-switch">
                     <input type="checkbox" id="cardPublished" name="published" checked>
@@ -1628,6 +1624,7 @@ function escapeHtml(text) {
 // Bulk Mode
 // ============================================================================
 let bulkMode = false;
+const bulkSelected = new Set();
 document.getElementById('bulkModeToggle')?.addEventListener('change', () => {
     bulkMode = !bulkMode;
     document.getElementById('kanban-board').classList.toggle('bulk-mode', bulkMode);
