@@ -228,6 +228,15 @@ router.post('/invites/send', async (req, res) => {
         return res.status(409).json({ error: 'A user with that email already exists' });
     }
 
+    // Check for existing pending invite to the same email
+    const pendingInvite = await req.db.query(
+        `SELECT id FROM invites WHERE email = $1 AND used = false AND expires_at > NOW()`,
+        [email]
+    );
+    if (pendingInvite.rowCount > 0) {
+        return res.status(409).json({ error: 'A pending invite already exists for that email' });
+    }
+
     try {
         // Insert invite record (expires in 48 hours)
         const inviteResult = await req.db.query(

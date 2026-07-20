@@ -19,6 +19,8 @@
  */
 
 import { Router } from 'express';
+import path       from 'path';
+import fs         from 'fs/promises';
 
 const router = Router();
 
@@ -162,6 +164,19 @@ router.post('/', async (req, res) => {
         return res.status(400).json({ error: 'visibility must be public or private' });
     }
 
+    // Resolve assignee_username to assignee_id if provided
+    let resolvedAssigneeId = assignee_id;
+    const { assignee_username } = req.body;
+    if (assignee_username && !resolvedAssigneeId) {
+        const userCheck = await req.db.query(
+            'SELECT id FROM users WHERE username = $1',
+            [assignee_username.trim()]
+        );
+        if (userCheck.rows[0]) {
+            resolvedAssigneeId = userCheck.rows[0].id;
+        }
+    }
+
     try {
         // Verify the target column exists
         const colCheck = await req.db.query('SELECT id, name, wip_limit FROM columns WHERE id = $1', [column_id]);
@@ -203,7 +218,7 @@ router.post('/', async (req, res) => {
                 column_id,
                 pos,
                 req.user.id,
-                assignee_id || null,
+                resolvedAssigneeId || null,
                 visibility  || 'public',
             ]
         );
@@ -249,6 +264,18 @@ router.put('/:id', async (req, res) => {
             return res.status(400).json({ error: 'visibility must be public or private' });
         }
 
+        // Resolve assignee_username to assignee_id if provided
+        let resolvedAssigneeId = updates.assignee_id;
+        if (updates.assignee_username && !resolvedAssigneeId) {
+            const userCheck = await req.db.query(
+                'SELECT id FROM users WHERE username = $1',
+                [updates.assignee_username.trim()]
+            );
+            if (userCheck.rows[0]) {
+                resolvedAssigneeId = userCheck.rows[0].id;
+            }
+        }
+
         const ALLOWED = ['title', 'description', 'priority', 'column_id',
                          'position_in_column', 'assignee_id', 'visibility'];
 
@@ -259,7 +286,7 @@ router.put('/:id', async (req, res) => {
         for (const key of ALLOWED) {
             if (key in updates) {
                 fields.push(`${key} = $${idx++}`);
-                values.push(key === 'assignee_id' ? (updates[key] || null) : updates[key]);
+                values.push(key === 'assignee_id' ? (resolvedAssigneeId || null) : updates[key]);
             }
         }
 
@@ -624,6 +651,158 @@ router.delete('/:id/comments/:commentId', async (req, res) => {
     } catch (err) {
         console.error('Comment delete error:', err);
         res.status(500).json({ error: 'Server error deleting comment' });
+    }
+});
+
+// ---------------------------------------------------------------------------
+// Helper: log card attachment activity (fire-and-forget)
+// ---------------------------------------------------------------------------
+const logAttachmentActivity = (db, cardId, userId, action, details = {}) => {
+    db.query(
+        'INSERT INTO card_activity (card_id, user_id, action, details) VALUES ($1, $2, $3, $4)',
+        [cardId, userId, action, JSON.stringify(details)]
+    ).catch((err) => console.error('Attachment activity log write failed:', err));
+};
+
+// ===========================================================================
+// ATTACHMENTS
+// ===========================================================================
+const UPLOAD_DIR   = path.resolve(process.env.UPLOAD_DIR || './uploads');
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+
+// ---------------------------------------------------------------------------
+// POST /api/cards/:id/attachments  — upload a document (expects FormData)
+// ---------------------------------------------------------------------------
+router.post('/:id/attachments', async (req, res) => {
+    const { id: userId, role } = req.user;
+    const cardId   = req.params.id;
+    const file     = req.file;
+
+    if (!file) {
+        return res.status(400).json({ error: 'No file provided' });
+    }
+
+    try {
+        // Verify card exists and user can access it
+        const cardResult = await req.db.query('SELECT * FROM cards WHERE id = $1', [cardId]);
+        const card = cardResult.rows[0];
+        if (!card) return res.status(404).json({ error: 'Card not found' });
+        if (!canView(card, userId, role)) {
+            return res.status(403).json({ error: 'Access denied' });
+        }
+
+        // Ensure upload directory exists
+        await fs.mkdir(UPLOAD_DIR, { recursive: true });
+
+        const storedPath = path.join(UPLOAD_DIR, file.filename);
+
+        // Record in database
+        const result = await req.db.query(
+            `INSERT INTO card_attachments (card_id, user_id, filename, original_filename, mime_type, size_bytes)
+             VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+            [cardId, userId, file.filename, file.originalname, file.mimetype, file.size]
+        );
+
+        const attachment = result.rows[0];
+
+        logAttachmentActivity(req.db, cardId, userId, 'document_added', {
+            filename: file.originalname,
+            attachment_id: attachment.id,
+        });
+
+        audit(req.db, 'card_attachment_upload', userId, req.ip, {
+            card_id: cardId,
+            filename: file.originalname,
+            size_bytes: file.size,
+        });
+
+        res.status(201).json({ ...attachment, download_url: `/uploads/${file.filename}` });
+    } catch (err) {
+        console.error('Attachment upload error:', err);
+        res.status(500).json({ error: 'Server error uploading attachment' });
+    }
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/cards/:id/attachments  — list attachments on a card
+// ---------------------------------------------------------------------------
+router.get('/:id/attachments', async (req, res) => {
+    const { id: userId, role } = req.user;
+
+    try {
+        const cardResult = await req.db.query('SELECT * FROM cards WHERE id = $1', [req.params.id]);
+        const card = cardResult.rows[0];
+        if (!card) return res.status(404).json({ error: 'Card not found' });
+        if (!canView(card, userId, role)) {
+            return res.status(403).json({ error: 'Access denied' });
+        }
+
+        const result = await req.db.query(
+            `SELECT ca.*, u.username AS uploaded_by
+             FROM card_attachments ca
+             LEFT JOIN users u ON u.id = ca.user_id
+             WHERE ca.card_id = $1
+             ORDER BY ca.created_at ASC`,
+            [req.params.id]
+        );
+
+        // Add download_url to each row
+        const rows = result.rows.map(r => ({ ...r, download_url: `/uploads/${r.filename}` }));
+        res.json(rows);
+    } catch (err) {
+        console.error('Attachments fetch error:', err);
+        res.status(500).json({ error: 'Server error fetching attachments' });
+    }
+});
+
+// ---------------------------------------------------------------------------
+// DELETE /api/cards/:id/attachments/:aid  — remove an attachment (uploader or admin)
+// ---------------------------------------------------------------------------
+router.delete('/:id/attachments/:aid', async (req, res) => {
+    const { id: userId, role } = req.user;
+
+    try {
+        // Fetch the attachment record
+        const attResult = await req.db.query(
+            'SELECT * FROM card_attachments WHERE id = $1 AND card_id = $2',
+            [req.params.aid, req.params.id]
+        );
+        const att = attResult.rows[0];
+        if (!att) return res.status(404).json({ error: 'Attachment not found' });
+
+        // Check card access
+        const cardResult = await req.db.query('SELECT * FROM cards WHERE id = $1', [req.params.id]);
+        const card = cardResult.rows[0];
+        if (!card) return res.status(404).json({ error: 'Card not found' });
+
+        // Authorizer: uploader, assignee, owner, or admin
+        const canDelete = role === 'admin'
+            || card.owner_id === userId
+            || att.user_id === userId;
+        if (!canDelete) {
+            return res.status(403).json({ error: 'Only the uploader, card owner, or an admin can remove this attachment' });
+        }
+
+        // Delete physical file
+        try {
+            const filePath = path.join(UPLOAD_DIR, att.filename);
+            await fs.unlink(filePath);
+        } catch (fileErr) {
+            console.error('File unlink warning:', fileErr.message);
+        }
+
+        // Delete DB record
+        await req.db.query('DELETE FROM card_attachments WHERE id = $1', [req.params.aid]);
+
+        logAttachmentActivity(req.db, req.params.id, userId, 'document_removed', {
+            filename: att.original_filename,
+            attachment_id: att.id,
+        });
+
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Attachment delete error:', err);
+        res.status(500).json({ error: 'Server error deleting attachment' });
     }
 });
 

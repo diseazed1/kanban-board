@@ -12,7 +12,9 @@ import pg           from 'pg';
 import session      from 'express-session';
 import connectPg    from 'connect-pg-simple';
 import helmet       from 'helmet';
-import rateLimit    from 'express-rate-limit';
+import multer       from 'multer';
+import path         from 'path';
+import fs           from 'fs/promises';
 
 import { authenticate, requireRole } from './middleware/auth.js';
 import authRoutes   from './routes/auth.js';
@@ -44,6 +46,28 @@ const db = new pg.Pool({
 db.on('error', (err) => console.error('PostgreSQL pool error:', err));
 
 // ---------------------------------------------------------------------------
+// File upload configuration (multer)
+// ---------------------------------------------------------------------------
+const UPLOAD_DIR = path.resolve(process.env.UPLOAD_DIR || './uploads');
+
+const storage = multer.diskStorage({
+    destination: async (req, file, cb) => {
+        await fs.mkdir(UPLOAD_DIR, { recursive: true });
+        cb(null, UPLOAD_DIR);
+    },
+    filename: (req, file, cb) => {
+        const ext = path.extname(file.originalname).toLowerCase() || '.bin';
+        const basename = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}${ext}`;
+        cb(null, basename);
+    },
+});
+
+const upload = multer({
+    storage,
+    limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB max
+});
+
+// ---------------------------------------------------------------------------
 // Express app
 // ---------------------------------------------------------------------------
 const app = express();
@@ -58,7 +82,7 @@ app.use(helmet({
             defaultSrc: ["'self'"],
             scriptSrc:  ["'self'", "'unsafe-inline'"],
             styleSrc:   ["'self'", "'unsafe-inline'"],
-            imgSrc:     ["'self'", 'data:'],
+            imgSrc:     ["'self'", 'data:', 'blob:'],
         },
     },
 }));
@@ -91,18 +115,13 @@ app.use(session({
 // Serve static files (index.html, admin.html, register.html)
 app.use(express.static('public'));
 
+// Serve uploaded attachments statically
+app.use('/uploads', express.static(UPLOAD_DIR));
+
 // ---------------------------------------------------------------------------
-// Rate limiting — protect login endpoint from brute-force
+// Rate limiting — applied directly in routes/auth.js on POST /login only
+// (Kept here for backward compatibility but no longer mounted globally)
 // ---------------------------------------------------------------------------
-const loginLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,   // 15 minutes
-    max: 15,                     // 15 login attempts per window
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: { error: 'Too many login attempts — please try again later' },
-    // Only apply to the login endpoint (not /me, /logout, etc.)
-    skip: (req) => req.path !== '/login' || req.method !== 'POST',
-});
 
 // ---------------------------------------------------------------------------
 // Inject database pool into every request

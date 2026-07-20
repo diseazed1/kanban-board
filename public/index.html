@@ -258,6 +258,48 @@
             font-size: 0.85rem; resize: vertical; min-height: 50px;
         }
 
+        /* Attachments */
+        .attachment-list { list-style: none; padding: 0; margin-top: 0.5rem; }
+        .attachment-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem;
+            background: #f8f9fa;
+            border-radius: 4px;
+            margin-bottom: 0.25rem;
+            font-size: 0.8rem;
+        }
+        .attachment-item .attach-info { flex: 1; min-width: 0; }
+        .attachment-item .attach-name {
+            font-weight: 600;
+            color: #2c3e50;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .attachment-item .attach-meta { color: #999; font-size: 0.7rem; }
+        .attachment-item .attach-download {
+            color: #3498db;
+            text-decoration: none;
+            padding: 0.25rem 0.5rem;
+            border-radius: 3px;
+            font-size: 0.75rem;
+        }
+        .attachment-item .attach-download:hover { background: #eaf2f8; }
+        .attachment-item .attach-delete-btn {
+            background: none;
+            border: none;
+            color: #e74c3c;
+            cursor: pointer;
+            font-size: 0.75rem;
+            padding: 0.25rem 0.4rem;
+            border-radius: 3px;
+        }
+        .attachment-item .attach-delete-btn:hover { background: #fde8e6; }
+        .upload-area { display: flex; gap: 0.5rem; align-items: center; margin-top: 0.5rem; }
+        .upload-area input[type="file"] { font-size: 0.8rem; }
+
         /* ------------------------------------------------------------------ */
         /* Alerts                                                               */
         /* ------------------------------------------------------------------ */
@@ -416,6 +458,15 @@
             <div class="comment-form">
                 <textarea id="newCommentBody" placeholder="Add a comment..."></textarea>
                 <button class="btn btn-primary btn-sm" id="postCommentBtn" style="align-self:flex-end;padding:0.4rem 0.8rem;">Post</button>
+            </div>
+        </div>
+
+        <div class="detail-section">
+            <h3>Attachments</h3>
+            <ul class="attachment-list" id="attachmentList"></ul>
+            <div class="upload-area">
+                <input type="file" id="attachFileInput" accept="*/*">
+                <button class="btn btn-primary btn-sm" id="uploadAttachBtn" style="padding:0.4rem 0.8rem;">Upload</button>
             </div>
         </div>
 
@@ -773,14 +824,16 @@ async function openDetailModal(cardId) {
             ${card.assignee_username ? ` | Assigned to: <strong>${escapeHtml(card.assignee_username)}</strong>` : ''}
         </p>`;
 
-    // Load comments and activity in parallel
-    const [comments, activity] = await Promise.all([
+    // Load comments, activity, and attachments in parallel
+    const [comments, activity, attachments] = await Promise.all([
         api('GET', `/api/cards/${cardId}/comments`).catch(() => []),
         api('GET', `/api/cards/${cardId}/activity`).catch(() => []),
+        api('GET', `/api/cards/${cardId}/attachments`).catch(() => []),
     ]);
 
     renderComments(comments || []);
     renderActivity(activity || []);
+    renderAttachments(attachments || []);
 
     detailModal.showModal();
 }
@@ -831,6 +884,8 @@ function formatActivityAction(a) {
         case 'edited': return `edited ${escapeHtml(d.field || 'card')}`;
         case 'assigned': return `updated assignment`;
         case 'comment_added': return `added a comment`;
+        case 'document_added': return `attached <strong>${escapeHtml(d.filename || 'a file')}</strong>`;
+        case 'document_removed': return `removed attachment <strong>${escapeHtml(d.filename || '')}</strong>`;
         default: return escapeHtml(a.action);
     }
 }
@@ -840,6 +895,89 @@ function formatTime(iso) {
     const d = new Date(iso);
     return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
+
+// ============================================================================
+// Attachments
+// ============================================================================
+function formatFileSize(bytes) {
+    if (bytes == null) return '';
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(1024));
+    return (bytes / Math.pow(1024, i)).toFixed(i > 0 ? 1 : 0) + ' ' + sizes[i];
+}
+
+function renderAttachments(attachments) {
+    const list = document.getElementById('attachmentList');
+    if (attachments.length === 0) {
+        list.innerHTML = '<li style="font-size:0.8rem;color:#999;">No attachments yet.</li>';
+        return;
+    }
+    list.innerHTML = attachments.map(a => {
+        const canDelete = currentUser?.role === 'admin'
+            || (currentUser?.id && a.user_id !== null && String(currentUser.id) === String(a.user_id));
+        return `
+        <li class="attachment-item">
+            <div class="attach-info">
+                <div class="attach-name" title="${escapeHtml(a.original_filename)}">📄 ${escapeHtml(a.original_filename)}</div>
+                <div class="attach-meta">${formatFileSize(a.size_bytes)} · by ${escapeHtml(a.uploaded_by || 'Unknown')} · ${formatTime(a.created_at)}</div>
+            </div>
+            <a href="${a.download_url}" class="attach-download" download>Download</a>
+            ${canDelete ? `<button class="attach-delete-btn" data-aid="${a.id}">Remove</button>` : ''}
+        </li>`;
+    }).join('');
+}
+
+// Upload attachment
+document.getElementById('uploadAttachBtn').addEventListener('click', async () => {
+    const fileInput = document.getElementById('attachFileInput');
+    const file = fileInput.files[0];
+    if (!file || !detailCardId) return;
+
+    try {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        // Use fetch directly for multipart (api() helper sends JSON by default)
+        const res = await fetch(`/api/cards/${detailCardId}/attachments`, {
+            method: 'POST',
+            credentials: 'include',
+            body: formData,
+        });
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({ error: res.statusText }));
+            throw new Error(err.error || res.statusText);
+        }
+
+        fileInput.value = '';
+        // Refresh attachments, comments and activity
+        const [attachments, activity] = await Promise.all([
+            api('GET', `/api/cards/${detailCardId}/attachments`).catch(() => []),
+            api('GET', `/api/cards/${detailCardId}/activity`).catch(() => []),
+        ]);
+        renderAttachments(attachments || []);
+        renderActivity(activity || []);
+    } catch (err) {
+        alert('Upload failed: ' + err.message);
+    }
+});
+
+// Delete attachment (event delegation)
+document.getElementById('attachmentList').addEventListener('click', async (e) => {
+    const btn = e.target.closest('.attach-delete-btn');
+    if (!btn) return;
+    if (!confirm('Remove this attachment?')) return;
+    try {
+        await api('DELETE', `/api/cards/${detailCardId}/attachments/${btn.dataset.aid}`);
+        const [attachments, activity] = await Promise.all([
+            api('GET', `/api/cards/${detailCardId}/attachments`).catch(() => []),
+            api('GET', `/api/cards/${detailCardId}/activity`).catch(() => []),
+        ]);
+        renderAttachments(attachments || []);
+        renderActivity(activity || []);
+    } catch (err) {
+        alert('Remove failed: ' + err.message);
+    }
+});
 
 // Post comment
 document.getElementById('postCommentBtn').addEventListener('click', async () => {

@@ -11,6 +11,7 @@
 
 import { Router } from 'express';
 import argon2     from 'argon2';
+import rateLimit  from 'express-rate-limit';
 import { authenticate } from '../middleware/auth.js';
 
 const router = Router();
@@ -36,9 +37,20 @@ const audit = (db, action, userId, ip, metadata = {}) => {
 };
 
 // ---------------------------------------------------------------------------
+// Rate limiting — login only (not /me, /logout, etc.)
+// ---------------------------------------------------------------------------
+const loginLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max:      15,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Too many login attempts — please try again later' },
+});
+
+// ---------------------------------------------------------------------------
 // POST /api/auth/login
 // ---------------------------------------------------------------------------
-router.post('/login', async (req, res) => {
+router.post('/login', loginLimiter, async (req, res) => {
     const { username, password } = req.body;
 
     if (!username || !password) {
