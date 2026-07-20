@@ -175,59 +175,35 @@
         .visibility-badge.public  { background: #d5f5e3; color: #1e8449; }
         .visibility-badge.private { background: #fde8e8; color: #c0392b; }
 
-        .card-checkbox { position: absolute; top: 6px; left: 8px; z-index: 2; display: none; }
-        .bulk-mode .card-checkbox { display: block; }
+        .comment-count-badge {
+            font-size: 0.7rem; color: #7f8c8d;
+        }
 
-        /* Due date badge */
+        /* ------------------------------------------------------------------ */
+        /* Bulk select mode                                                     */
+        /* ------------------------------------------------------------------ */
+        .card-checkbox { position: absolute; top: 6px; left: 6px; z-index: 2; display: none; }
+        .bulk-mode .card-checkbox { display: block; }
+        #bulkActionBar {
+            display: none; padding: 0.5rem 1.5rem; background: #3498db; color: white;
+            align-items: center; gap: 0.75rem; font-size: 0.85rem;
+        }
+        #bulkActionBar.visible { display: flex; }
+        #bulkActionBar .btn { padding: 0.3rem 0.75rem; font-size: 0.8rem; background: white; color: #3498db; }
+        .bulk-select-toggle {
+            margin-left: auto; display: flex; align-items: center;
+            gap: 0.4rem; font-size: 0.8rem; color: #7f8c8d; cursor: pointer;
+        }
+
+        /* ------------------------------------------------------------------ */
+        /* Due date badge                                                       */
+        /* ------------------------------------------------------------------ */
         .due-date-badge {
             display: inline-block; font-size: 0.65rem; padding: 1px 5px;
             border-radius: 3px; background: #fef9e7; color: #b7950b;
             font-weight: 700; margin-left: 4px;
         }
         .due-date-badge.overdue { background: #e74c3c; color: white; }
-
-        /* Tag badges — color-coded */
-        .tag-badges { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
-        .tag-badge {
-            display: inline-block; padding: 1px 7px; border-radius: 3px;
-            font-size: 0.65rem; font-weight: 700; letter-spacing: 0.02em;
-        }
-
-        /* Bulk action bar */
-        #bulkActionBar {
-            display: none; padding: 0.5rem 1.5rem; background: #3498db; color: white;
-            align-items: center; gap: 0.75rem; font-size: 0.85rem;
-        }
-        #bulkActionBar.visible { display: flex; }
-        #bulkActionBar .btn { padding: 0.3rem 0.75rem; font-size: 0.8rem; }
-        .bulk-select-toggle {
-            margin-left: auto; display: flex; align-items: center;
-            gap: 0.4rem; font-size: 0.8rem; color: #7f8c8d; cursor: pointer;
-        }
-
-        /* Notification pref toggles */
-        .notif-pref-row {
-            display: flex; align-items: center; justify-content: space-between;
-            padding: 0.6rem 0; border-bottom: 1px solid #eee; font-size: 0.85rem;
-        }
-        .notif-pref-desc { color: #999; font-size: 0.75rem; display: block; }
-
-        /* CSV import */
-        #csvImportModal .modal-body { max-width: 500px; }
-        .upload-area { display: flex; gap: 0.5rem; align-items: center; margin-top: 0.5rem; }
-        .upload-area input[type="file"] { font-size: 0.8rem; }
-
-        /* Admin nav links */
-        #adminNav {
-            display: none; padding: 0.5rem 1.5rem; background: #f8f9fa;
-            border-bottom: 1px solid #ddd; font-size: 0.85rem;
-        }
-        #adminNav a { color: #2c3e50; text-decoration: none; margin-right: 1.5rem; cursor: pointer; }
-        #adminNav a:hover { text-decoration: underline; }
-
-        .comment-count-badge {
-            font-size: 0.7rem; color: #7f8c8d;
-        }
 
         /* ------------------------------------------------------------------ */
         /* Dialog / Modal                                                       */
@@ -357,7 +333,6 @@
         <h1>Kanban Board</h1>
         <div class="header-actions">
             <span id="user-badge"></span>
-            <button id="showNotifBtn" class="btn btn-secondary btn-sm">🔔 Notifs</button>
             <button id="changePasswordBtn" class="btn btn-warning">Change Password</button>
             <a id="adminLink" href="/admin.html" class="btn btn-danger" style="display:none;">Admin</a>
             <button id="logoutBtn" class="btn btn-secondary">Logout</button>
@@ -366,7 +341,6 @@
 
     <div class="board-toolbar">
         <button id="addCardBtn" class="btn btn-primary">+ Add Card</button>
-        <label class="bulk-select-toggle"><input type="checkbox" id="bulkModeToggle"> Bulk Select</label>
         <div class="search-filter-bar">
             <input type="text" id="searchInput" placeholder="Search cards...">
             <select id="filterPriority">
@@ -381,6 +355,9 @@
                 <option value="">All Assignees</option>
             </select>
         </div>
+        <label class="bulk-select-toggle" id="bulkSelectToggle">
+            <input type="checkbox" id="bulkModeCheck"> Bulk Select
+        </label>
         <div class="priority-legend">
             <span class="legend-item"><span class="legend-swatch" style="background:#e74c3c;"></span>Critical</span>
             <span class="legend-item"><span class="legend-swatch" style="background:#e67e22;"></span>High</span>
@@ -390,24 +367,19 @@
         </div>
     </div>
 
-    <div class="board" id="kanban-board"></div>
-
-    <!-- Admin nav (admin only) -->
-    <nav id="adminNav">
-        <a id="adminImportLink">📥 Import CSV</a>
-        <a id="adminDashboardLink">📊 Analytics</a>
-        <a id="adminWebhooksLink">🔗 Webhooks</a>
-    </nav>
-
-    <!-- Bulk Action Bar -->
+    <!-- BULK ACTION BAR -->
     <div id="bulkActionBar">
-        <span><strong id="bulkSelectedCount">0</strong> selected</span>
-        <select id="bulkMoveColumn" style="padding:3px 6px;border-radius:4px;font-size:0.8rem;"></select>
-        <button class="btn btn-success btn-sm" id="bulkMoveBtn">Move</button>
-        <input type="text" id="bulkAssignInput" placeholder="Assign to..." style="padding:3px 6px;border-radius:4px;font-size:0.8rem;width:110px;border:1px solid #ccc;">
-        <button class="btn btn-warning btn-sm" id="bulkAssignBtn">Assign</button>
-        <button class="btn btn-danger btn-sm" id="bulkDeleteBtn">Delete All</button>
+        <span id="bulkCount">0 selected</span>
+        <select id="bulkMoveColumn" class="btn">
+            <option value="">Move to Column...</option>
+        </select>
+        <button id="bulkMoveBtn" class="btn">Move</button>
+        <input type="text" id="bulkAssignInput" placeholder="Assign to..." style="padding:0.3rem 0.5rem;font-size:0.8rem;border-radius:4px;border:none;">
+        <button id="bulkAssignBtn" class="btn">Assign</button>
+        <button id="bulkDeleteBtn" class="btn">Delete All</button>
     </div>
+
+    <div class="board" id="kanban-board"></div>
 </div>
 
 <!-- CARD EDITOR MODAL -->
@@ -533,8 +505,29 @@
     </div>
 </dialog>
 
+<!-- CSV IMPORT MODAL (Admin only) -->
+<dialog id="csvImportModal">
+    <div class="modal-header">
+        <h2>CSV Import</h2>
+        <button class="modal-close" id="csvImportClose">&times;</button>
+    </div>
+    <div class="modal-body">
+        <div id="csv-error" class="alert alert-error" style="display:none;"></div>
+        <div id="csv-success" class="alert alert-success" style="display:none;"></div>
+        <p style="font-size:0.85rem;color:#555;margin-bottom:1rem;">Upload a CSV file with columns: <code>title</code>, <code>description</code>, <code>priority</code>, <code>column_name</code>, <code>assignee</code></p>
+        <div class="form-group">
+            <label for="csvFileInput">CSV File</label>
+            <input type="file" id="csvFileInput" accept=".csv,text/csv">
+        </div>
+    </div>
+    <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="csvImportCancelBtn">Cancel</button>
+        <button type="button" class="btn btn-primary" id="csvImportBtn">Import</button>
+    </div>
+</dialog>
+
 <!-- NOTIFICATION PREFERENCES MODAL -->
-<dialog id="notifPrefsModal" style="width:480px;">
+<dialog id="notifPrefsModal">
     <div class="modal-header">
         <h2>Notification Preferences</h2>
         <button class="modal-close" id="notifPrefsClose">&times;</button>
@@ -542,71 +535,60 @@
     <div class="modal-body">
         <div id="notif-error" class="alert alert-error" style="display:none;"></div>
         <div id="notif-success" class="alert alert-success" style="display:none;"></div>
-        <form id="notifPrefsForm">
-            <div class="notif-pref-row">
-                <div><strong>Card Created</strong><span class="notif-pref-desc">When a new card is created</span></div>
-                <label class="toggle-switch"><input type="checkbox" name="card_created"><span class="toggle-slider"></span></label>
-            </div>
-            <div class="notif-pref-row">
-                <div><strong>Card Updated</strong><span class="notif-pref-desc">When a card is edited</span></div>
-                <label class="toggle-switch"><input type="checkbox" name="card_updated"><span class="toggle-slider"></span></label>
-            </div>
-            <div class="notif-pref-row">
-                <div><strong>Card Assigned</strong><span class="notif-pref-desc">When a card is assigned to you</span></div>
-                <label class="toggle-switch"><input type="checkbox" name="card_assigned"><span class="toggle-slider"></span></label>
-            </div>
-            <div class="notif-pref-row">
-                <div><strong>Card Moved</strong><span class="notif-pref-desc">When a card is moved to another column</span></div>
-                <label class="toggle-switch"><input type="checkbox" name="card_moved"><span class="toggle-slider"></span></label>
-            </div>
-            <div class="notif-pref-row">
-                <div><strong>Due Date Reminder</strong><span class="notif-pref-desc">When a card is approaching its due date</span></div>
-                <label class="toggle-switch"><input type="checkbox" name="card_due_reminder"><span class="toggle-slider"></span></label>
-            </div>
-            <div class="notif-pref-row">
-                <div><strong>Comment Added</strong><span class="notif-pref-desc">When someone comments on a card</span></div>
-                <label class="toggle-switch"><input type="checkbox" name="comment_added"><span class="toggle-slider"></span></label>
-            </div>
-            <div class="notif-pref-row">
-                <div><strong>Digest Enabled</strong><span class="notif-pref-desc">Receive a summary digest instead of individual notifications</span></div>
-                <label class="toggle-switch"><input type="checkbox" name="digest_enabled"><span class="toggle-slider"></span></label>
-            </div>
-            <div class="form-group" style="margin-top:1rem;">
-                <label for="notifDigestFreq">Digest Frequency</label>
-                <select id="notifDigestFreq" name="digest_frequency">
-                    <option value="realtime">Real-time</option>
-                    <option value="hourly">Hourly</option>
-                    <option value="daily">Daily</option>
-                </select>
-            </div>
-        </form>
+        <div class="detail-section">
+            <label class="toggle-switch">
+                <input type="checkbox" id="notifCardCreated" checked>
+                <span class="toggle-slider"></span>
+            </label>
+            <span style="margin-left:0.5rem;font-size:0.85rem;">Card Created</span>
+        </div>
+        <div class="detail-section">
+            <label class="toggle-switch">
+                <input type="checkbox" id="notifCardUpdated" checked>
+                <span class="toggle-slider"></span>
+            </label>
+            <span style="margin-left:0.5rem;font-size:0.85rem;">Card Updated</span>
+        </div>
+        <div class="detail-section">
+            <label class="toggle-switch">
+                <input type="checkbox" id="notifCardMoved" checked>
+                <span class="toggle-slider"></span>
+            </label>
+            <span style="margin-left:0.5rem;font-size:0.85rem;">Card Moved</span>
+        </div>
+        <div class="detail-section">
+            <label class="toggle-switch">
+                <input type="checkbox" id="notifCommentAdded" checked>
+                <span class="toggle-slider"></span>
+            </label>
+            <span style="margin-left:0.5rem;font-size:0.85rem;">Comment Added</span>
+        </div>
+        <div class="detail-section">
+            <label class="toggle-switch">
+                <input type="checkbox" id="notifAssigned" checked>
+                <span class="toggle-slider"></span>
+            </label>
+            <span style="margin-left:0.5rem;font-size:0.85rem;">Assignment Changed</span>
+        </div>
+        <div class="detail-section">
+            <label class="toggle-switch">
+                <input type="checkbox" id="notifDueDate" checked>
+                <span class="toggle-slider"></span>
+            </label>
+            <span style="margin-left:0.5rem;font-size:0.85rem;">Due Date Reminders</span>
+        </div>
+        <div class="form-group" style="margin-top:1rem;">
+            <label for="notifDigestFreq">Digest Frequency</label>
+            <select id="notifDigestFreq">
+                <option value="realtime">Real-time</option>
+                <option value="hourly">Hourly</option>
+                <option value="daily">Daily</option>
+            </select>
+        </div>
     </div>
     <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" id="notifPrefsCancelBtn">Close</button>
+        <button type="button" class="btn btn-secondary" id="notifPrefsCancelBtn">Cancel</button>
         <button type="button" class="btn btn-primary" id="notifPrefsSaveBtn">Save Preferences</button>
-    </div>
-</dialog>
-
-<!-- CSV IMPORT MODAL (admin only) -->
-<dialog id="csvImportModal" style="width:500px;">
-    <div class="modal-header">
-        <h2>Import Cards from CSV</h2>
-        <button class="modal-close" id="csvImportClose">&times;</button>
-    </div>
-    <div class="modal-body">
-        <div id="import-error" class="alert alert-error" style="display:none;"></div>
-        <div id="import-success" class="alert alert-success" style="display:none;"></div>
-        <p style="font-size:0.85rem;color:#7f8c8d;margin-bottom:1rem;">Upload a CSV file with columns: title, description, priority, column_id, assignee_username</p>
-        <form id="csvImportForm">
-            <div class="form-group">
-                <label for="csvFile">CSV File</label>
-                <input type="file" id="csvFile" accept=".csv,text/csv" required>
-            </div>
-        </form>
-    </div>
-    <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" id="csvImportCancelBtn">Close</button>
-        <button type="button" class="btn btn-primary" id="csvImportSaveBtn">Import</button>
     </div>
 </dialog>
 
@@ -618,6 +600,8 @@ let currentUser = null;
 let columns     = [];
 let cards       = [];
 let dragState   = { cardId: null, sourceColumnId: null, sourcePosition: null };
+let bulkMode    = false;
+let bulkSelected = new Set();
 
 // ============================================================================
 // API helper
@@ -685,8 +669,28 @@ function renderUserBadge() {
         <span class="role-tag ${currentUser.role}">${currentUser.role}</span>`;
     document.getElementById('adminLink').style.display =
         currentUser.role === 'admin' ? 'inline-block' : 'none';
-    document.getElementById('adminNav').style.display =
-        currentUser.role === 'admin' ? 'block' : 'none';
+
+    // Notification prefs button in header (add dynamically)
+    let notifBtn = document.getElementById('notifPrefsBtn');
+    if (!notifBtn) {
+        notifBtn = document.createElement('button');
+        notifBtn.id = 'notifPrefsBtn';
+        notifBtn.className = 'btn btn-warning';
+        notifBtn.textContent = '🔔 Notifs';
+        document.querySelector('.header-actions').insertBefore(notifBtn, document.getElementById('logoutBtn'));
+    }
+
+    // CSV import button for admins in toolbar
+    if (currentUser.role === 'admin') {
+        let csvBtn = document.getElementById('csvImportTrigger');
+        if (!csvBtn) {
+            csvBtn = document.createElement('button');
+            csvBtn.id = 'csvImportTrigger';
+            csvBtn.className = 'btn btn-success';
+            csvBtn.textContent = '📥 CSV Import';
+            document.getElementById('addCardBtn').parentNode.insertBefore(csvBtn, document.getElementById('addCardBtn').nextSibling);
+        }
+    }
 }
 
 // ============================================================================
@@ -701,6 +705,7 @@ async function loadBoard() {
         columns = colData || [];
         cards   = cardData || [];
         populateAssigneeFilter();
+        populateBulkMoveColumns();
         renderBoard();
     } catch (err) {
         console.error('Failed to load board:', err);
@@ -775,14 +780,6 @@ function renderCard(card, visible) {
     const visClass = card.visibility === 'private' ? 'private' : 'public';
     const visText  = card.visibility === 'private' ? 'Private' : 'Public';
 
-    // Due date badge
-    let dueDateHtml = '';
-    if (card.due_date) {
-        const isOverdue = card.is_overdue || new Date(card.due_date) < new Date();
-        const label = new Date(card.due_date).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-        dueDateHtml = `<span class="due-date-badge ${isOverdue ? 'overdue' : ''}">📅 ${label}</span>`;
-    }
-
     return `
     <div class="card priority-${card.priority} ${visible ? '' : 'filtered-out'}"
          draggable="${isOwner ? 'true' : 'false'}"
@@ -791,19 +788,21 @@ function renderCard(card, visible) {
          data-position="${card.position_in_column}">
         <input type="checkbox" class="card-checkbox" data-card-id="${card.id}">
         <div class="card-title">${escapeHtml(card.title)}</div>
+        ${card.due_date ? `<div class="due-date-badge ${(new Date(card.due_date) < new Date()) ? 'overdue' : ''}">Due: ${formatTime(card.due_date)}</div>` : ''}
         <div class="card-meta">
             <span>
                 <span class="card-priority-tag ${card.priority}">${card.priority}</span>
                 <span class="visibility-badge ${visClass}">${visText}</span>
-                ${dueDateHtml}
             </span>
             <span>${escapeHtml(card.owner_username || '')}${card.assignee_username ? ' &rarr; ' + escapeHtml(card.assignee_username) : ''}</span>
         </div>
         <div class="card-actions">
+            ${isOwner ? `
+            <button class="btn btn-secondary btn-sm card-clone-btn" data-card-id="${card.id}" title="Clone">📋 Clone</button>
+            ` : ''}
             <button class="btn btn-secondary btn-sm card-detail-btn" data-card-id="${card.id}">Details</button>
             ${isOwner ? `
             <button class="btn btn-primary btn-sm card-edit-btn" data-card-id="${card.id}">Edit</button>
-            <button class="btn btn-warning btn-sm card-clone-btn" data-card-id="${card.id}">📋 Clone</button>
             <button class="btn btn-danger btn-sm card-delete-btn" data-card-id="${card.id}">Delete</button>
             ` : ''}
         </div>
@@ -851,7 +850,6 @@ function openNewModal() {
     document.getElementById('modalTitle').textContent = 'New Card';
     cardIdInput.value = ''; cardTitleInput.value = ''; cardDescInput.value = '';
     cardPrioInput.value = 'medium'; cardAssInput.value = '';
-    document.getElementById('cardDueDate').value = '';
     cardPubInput.checked = true; deleteBtn.style.display = 'none';
     modalErrEl.style.display = 'none';
     populateColumnSelect(columns[0]?.id);
@@ -867,17 +865,8 @@ function openEditModal(cardId) {
     cardDescInput.value = card.description || '';
     cardPrioInput.value = card.priority;
     cardAssInput.value = card.assignee_username || '';
+    document.getElementById('cardDueDate').value = card.due_date ? card.due_date.slice(0, 16) : '';
     cardPubInput.checked = card.visibility !== 'private';
-    // Set due date
-    const dueDateInput = document.getElementById('cardDueDate');
-    if (card.due_date) {
-        const d = new Date(card.due_date);
-        // Convert to local datetime-local format
-        const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
-        dueDateInput.value = local;
-    } else {
-        dueDateInput.value = '';
-    }
     deleteBtn.style.display = 'inline-block';
     modalErrEl.style.display = 'none';
     populateColumnSelect(card.column_id);
@@ -899,15 +888,14 @@ document.getElementById('saveCardBtn').addEventListener('click', async () => {
     modalErrEl.style.display = 'none';
     const id = cardIdInput.value;
     const visibility = cardPubInput.checked ? 'public' : 'private';
-    const dueDateVal = document.getElementById('cardDueDate').value;
     const payload = {
         title: cardTitleInput.value.trim(),
         description: cardDescInput.value.trim(),
         priority: cardPrioInput.value,
         column_id: parseInt(cardColInput.value, 10),
         assignee_username: cardAssInput.value.trim() || null,
+        due_date: document.getElementById('cardDueDate').value || null,
         visibility,
-        due_date: dueDateVal || (id ? null : undefined),
     };
     if (!payload.title) { modalErrEl.textContent = 'Title is required.'; modalErrEl.style.display = 'block'; return; }
     if (!payload.column_id || isNaN(payload.column_id)) { modalErrEl.textContent = 'Please select a column.'; modalErrEl.style.display = 'block'; return; }
@@ -947,11 +935,7 @@ async function openDetailModal(cardId) {
             Priority: <span class="card-priority-tag ${card.priority}">${card.priority}</span> |
             Owner: <strong>${escapeHtml(card.owner_username || 'N/A')}</strong>
             ${card.assignee_username ? ` | Assigned to: <strong>${escapeHtml(card.assignee_username)}</strong>` : ''}
-        </p>
-        ${card.due_date ? `
-        <p style="font-size:0.8rem;margin-top:0.4rem;color:#7f8c8d;">
-            Due: <span class="due-date-badge ${card.is_overdue ? 'overdue' : ''}">${new Date(card.due_date).toLocaleString()}</span>
-        </p>` : ''}`;
+        </p>`;
 
     // Load comments and activity in parallel
     const [comments, activity] = await Promise.all([
@@ -1052,7 +1036,148 @@ document.getElementById('commentList').addEventListener('click', async (e) => {
 });
 
 // ============================================================================
-// Board click delegation (Edit, Delete, Detail, Clone buttons)
+// Bulk Select Mode
+// ============================================================================
+document.getElementById('bulkModeCheck').addEventListener('change', (e) => {
+    bulkMode = e.target.checked;
+    document.querySelectorAll('.column').forEach(col => col.classList.toggle('bulk-mode', bulkMode));
+    const actionBar = document.getElementById('bulkActionBar');
+    actionBar.classList.toggle('visible', bulkMode && bulkSelected.size > 0);
+});
+
+function populateBulkMoveColumns() {
+    const select = document.getElementById('bulkMoveColumn');
+    select.innerHTML = '<option value="">Move to Column...</option>' +
+        columns.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+}
+
+document.getElementById('kanban-board').addEventListener('change', (e) => {
+    if (e.target.classList.contains('card-checkbox')) {
+        const cardId = e.target.dataset.cardId;
+        if (e.target.checked) bulkSelected.add(cardId);
+        else bulkSelected.delete(cardId);
+        document.getElementById('bulkCount').textContent = `${bulkSelected.size} selected`;
+        document.getElementById('bulkActionBar').classList.toggle('visible', bulkMode && bulkSelected.size > 0);
+    }
+});
+
+document.getElementById('bulkMoveBtn').addEventListener('click', async () => {
+    const targetCol = parseInt(document.getElementById('bulkMoveColumn').value, 10);
+    if (!targetCol) return;
+    try {
+        await api('PATCH', '/api/cards/bulk/move', { card_ids: [...bulkSelected], column_id: targetCol });
+        bulkSelected.clear(); await loadBoard();
+    } catch (err) { alert(`Bulk move failed: ${err.message}`); }
+});
+document.getElementById('bulkAssignBtn').addEventListener('click', async () => {
+    const username = document.getElementById('bulkAssignInput').value.trim();
+    if (!username) return;
+    try {
+        await api('PATCH', '/api/cards/bulk/assign', { card_ids: [...bulkSelected], assignee_username: username });
+        bulkSelected.clear(); await loadBoard();
+    } catch (err) { alert(`Bulk assign failed: ${err.message}`); }
+});
+document.getElementById('bulkDeleteBtn').addEventListener('click', async () => {
+    if (!confirm(`Delete ${bulkSelected.size} selected cards?`)) return;
+    try {
+        await api('DELETE', '/api/cards/bulk', { card_ids: [...bulkSelected] });
+        bulkSelected.clear(); await loadBoard();
+    } catch (err) { alert(`Bulk delete failed: ${err.message}`); }
+});
+
+// ============================================================================
+// Clone Card
+// ============================================================================
+document.getElementById('kanban-board').addEventListener('click', async (e) => {
+    const cloneBtn = e.target.closest('.card-clone-btn');
+    if (cloneBtn) {
+        e.stopPropagation();
+        try { await api('POST', `/api/cards/${cloneBtn.dataset.cardId}/clone`); await loadBoard(); }
+        catch (err) { alert(`Clone failed: ${err.message}`); }
+    }
+});
+
+// ============================================================================
+// CSV Import
+// ============================================================================
+const csvImportModal = document.getElementById('csvImportModal');
+document.getElementById('csvImportClose').addEventListener('click', () => csvImportModal.close());
+document.getElementById('csvImportCancelBtn').addEventListener('click', () => csvImportModal.close());
+document.getElementById('csvImportTrigger')?.addEventListener('click', () => {
+    document.getElementById('csv-error').style.display = 'none';
+    document.getElementById('csv-success').style.display = 'none';
+    document.getElementById('csvFileInput').value = '';
+    csvImportModal.showModal();
+});
+document.getElementById('csvImportBtn').addEventListener('click', async () => {
+    const file = document.getElementById('csvFileInput').files[0];
+    if (!file) { document.getElementById('csv-error').textContent = 'Select a CSV file.'; document.getElementById('csv-error').style.display = 'block'; return; }
+    const formData = new FormData(); formData.append('file', file);
+    try {
+        const res = await fetch('/api/import/csv', { method: 'POST', credentials: 'include', body: formData });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+        document.getElementById('csv-success').textContent = `Imported ${data.count || 0} cards.`;
+        document.getElementById('csv-success').style.display = 'block';
+        await loadBoard();
+    } catch (err) {
+        document.getElementById('csv-error').textContent = err.message;
+        document.getElementById('csv-error').style.display = 'block';
+    }
+});
+
+// ============================================================================
+// Notification Preferences
+// ============================================================================
+const notifPrefsModal = document.getElementById('notifPrefsModal');
+document.getElementById('notifPrefsClose').addEventListener('click', () => notifPrefsModal.close());
+document.getElementById('notifPrefsCancelBtn').addEventListener('click', () => notifPrefsModal.close());
+document.getElementById('notifPrefsBtn')?.addEventListener('click', async () => {
+    document.getElementById('notif-error').style.display = 'none';
+    document.getElementById('notif-success').style.display = 'none';
+    try {
+        const prefs = await api('GET', '/api/cards/notification-prefs');
+        if (prefs) {
+            ['card_created','card_updated','card_moved','comment_added','assigned','due_date'].forEach(key => {
+                const elId = 'notif' + key.charAt(0).toUpperCase() + key.slice(1);
+                const el = document.getElementById(elId);
+                if (el) el.checked = prefs[key] ?? true;
+            });
+            // Map keys to element IDs
+            document.getElementById('notifCardCreated').checked = prefs.card_created ?? true;
+            document.getElementById('notifCardUpdated').checked = prefs.card_updated ?? true;
+            document.getElementById('notifCardMoved').checked = prefs.card_moved ?? true;
+            document.getElementById('notifCommentAdded').checked = prefs.comment_added ?? true;
+            document.getElementById('notifAssigned').checked = prefs.assigned ?? true;
+            document.getElementById('notifDueDate').checked = prefs.due_date ?? true;
+            document.getElementById('notifDigestFreq').value = prefs.digest_frequency || 'realtime';
+        }
+    } catch (err) { console.log('No existing notif prefs'); }
+    notifPrefsModal.showModal();
+});
+document.getElementById('notifPrefsSaveBtn').addEventListener('click', async () => {
+    const payload = {
+        card_created: document.getElementById('notifCardCreated').checked,
+        card_updated: document.getElementById('notifCardUpdated').checked,
+        card_moved: document.getElementById('notifCardMoved').checked,
+        comment_added: document.getElementById('notifCommentAdded').checked,
+        assigned: document.getElementById('notifAssigned').checked,
+        due_date: document.getElementById('notifDueDate').checked,
+        digest_frequency: document.getElementById('notifDigestFreq').value,
+    };
+    try {
+        await api('PUT', '/api/cards/notification-prefs', payload);
+        document.getElementById('notif-success').textContent = 'Preferences saved!';
+        document.getElementById('notif-success').style.display = 'block';
+        setTimeout(() => notifPrefsModal.close(), 1500);
+    } catch (err) {
+        document.getElementById('notif-error').textContent = err.message;
+        document.getElementById('notif-error').style.display = 'block';
+    }
+});
+
+// ============================================================================
+// Board click delegation (Edit, Delete, Detail buttons)
 // ============================================================================
 document.getElementById('kanban-board').addEventListener('click', async (e) => {
     const detailBtn = e.target.closest('.card-detail-btn');
@@ -1060,9 +1185,6 @@ document.getElementById('kanban-board').addEventListener('click', async (e) => {
 
     const editBtn = e.target.closest('.card-edit-btn');
     if (editBtn) { e.stopPropagation(); openEditModal(editBtn.dataset.cardId); return; }
-
-    const cloneBtn = e.target.closest('.card-clone-btn');
-    if (cloneBtn) { e.stopPropagation(); cloneCard(cloneBtn.dataset.cardId); return; }
 
     const delBtn = e.target.closest('.card-delete-btn');
     if (delBtn) {
@@ -1243,185 +1365,6 @@ function escapeHtml(text) {
         }
     } catch (_) {}
 })();
-
-// ============================================================================
-// Clone Card
-// ============================================================================
-async function cloneCard(cardId) {
-    try {
-        const result = await api('POST', `/api/cards/${cardId}/clone`);
-        if (!result) return;
-        alert(`Cloned as "${result.card?.title}"`);
-        await loadBoard();
-    } catch (err) { alert('Clone failed: ' + err.message); }
-}
-
-// ============================================================================
-// Bulk Operations
-// ============================================================================
-let bulkMode = false;
-const bulkSelected = new Set();
-
-function populateBulkColumnSelect() {
-    const sel = document.getElementById('bulkMoveColumn');
-    sel.innerHTML = '<option value="">-- column --</option>' +
-        columns.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
-}
-
-function updateBulkActionBar() {
-    const bar = document.getElementById('bulkActionBar');
-    const count = bulkSelected.size;
-    document.getElementById('bulkSelectedCount').textContent = count;
-    if (count > 0) { bar.classList.add('visible'); } else { bar.classList.remove('visible'); }
-}
-
-document.getElementById('bulkModeToggle').addEventListener('change', (e) => {
-    bulkMode = e.target.checked;
-    const board = document.getElementById('kanban-board');
-    if (bulkMode) {
-        board.classList.add('bulk-mode');
-        populateBulkColumnSelect();
-    } else {
-        board.classList.remove('bulk-mode');
-        bulkSelected.clear();
-        updateBulkActionBar();
-    }
-});
-
-// Card checkbox delegation
-document.getElementById('kanban-board').addEventListener('click', (e) => {
-    if (!bulkMode) return;
-    const cb = e.target.closest('.card-checkbox');
-    if (cb) {
-        e.stopPropagation();
-        const cardId = cb.closest('.card').dataset.cardId;
-        if (cb.checked) { bulkSelected.add(cardId); } else { bulkSelected.delete(cardId); }
-        updateBulkActionBar();
-        return;
-    }
-});
-
-// Bulk Move
-document.getElementById('bulkMoveBtn').addEventListener('click', async () => {
-    const colId = parseInt(document.getElementById('bulkMoveColumn').value, 10);
-    if (!colId || bulkSelected.size === 0) return;
-    try {
-        await api('PATCH', '/api/cards/bulk/move', { card_ids: [...bulkSelected], column_id: colId });
-        bulkSelected.clear();
-        document.querySelectorAll('.card-checkbox:checked').forEach(cb => cb.checked = false);
-        updateBulkActionBar();
-        await loadBoard();
-    } catch (err) { alert('Bulk move failed: ' + err.message); }
-});
-
-// Bulk Assign
-document.getElementById('bulkAssignBtn').addEventListener('click', async () => {
-    const username = document.getElementById('bulkAssignInput').value.trim();
-    if (!username || bulkSelected.size === 0) return;
-    try {
-        await api('PATCH', '/api/cards/bulk/assign', { card_ids: [...bulkSelected], assignee_username: username });
-        bulkSelected.clear();
-        document.querySelectorAll('.card-checkbox:checked').forEach(cb => cb.checked = false);
-        updateBulkActionBar();
-        await loadBoard();
-    } catch (err) { alert('Bulk assign failed: ' + err.message); }
-});
-
-// Bulk Delete
-document.getElementById('bulkDeleteBtn').addEventListener('click', async () => {
-    if (bulkSelected.size === 0 || !confirm(`Delete ${bulkSelected.size} selected cards?`)) return;
-    try {
-        await api('DELETE', '/api/cards/bulk', { card_ids: [...bulkSelected] });
-        bulkSelected.clear();
-        document.querySelectorAll('.card-checkbox:checked').forEach(cb => cb.checked = false);
-        updateBulkActionBar();
-        await loadBoard();
-    } catch (err) { alert('Bulk delete failed: ' + err.message); }
-});
-
-// ============================================================================
-// CSV Import Modal
-// ============================================================================
-const csvImportModal = document.getElementById('csvImportModal');
-document.getElementById('adminImportLink').addEventListener('click', () => {
-    document.getElementById('import-error').style.display = 'none';
-    document.getElementById('import-success').style.display = 'none';
-    document.getElementById('csvFile').value = '';
-    csvImportModal.showModal();
-});
-document.getElementById('csvImportClose').addEventListener('click', () => csvImportModal.close());
-document.getElementById('csvImportCancelBtn').addEventListener('click', () => csvImportModal.close());
-document.getElementById('csvImportSaveBtn').addEventListener('click', async () => {
-    const file = document.getElementById('csvFile').files[0];
-    if (!file) { document.getElementById('import-error').textContent = 'Select a CSV file.'; document.getElementById('import-error').style.display = 'block'; return; }
-    const formData = new FormData();
-    formData.append('file', file);
-    try {
-        document.getElementById('import-success').style.display = 'none';
-        document.getElementById('import-error').style.display = 'none';
-        const res = await fetch('/api/import/csv', { method: 'POST', credentials: 'include', body: formData });
-        if (res.status === 401) { showLogin(); return; }
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-        document.getElementById('import-success').textContent = data.message || `Imported ${data.imported} cards.`;
-        document.getElementById('import-success').style.display = 'block';
-        await loadBoard();
-    } catch (err) {
-        document.getElementById('import-error').textContent = err.message;
-        document.getElementById('import-error').style.display = 'block';
-    }
-});
-
-// ============================================================================
-// Notification Preferences Modal
-// ============================================================================
-const notifPrefsModal = document.getElementById('notifPrefsModal');
-document.getElementById('showNotifBtn').addEventListener('click', async () => {
-    try {
-        const prefs = await api('GET', '/api/cards/notification-prefs');
-        if (!prefs) return;
-        const form = document.getElementById('notifPrefsForm');
-        ['card_created','card_updated','card_assigned','card_moved','card_due_reminder','comment_added','digest_enabled'].forEach(k => {
-            const cb = form.querySelector(`[name="${k}"]`);
-            if (cb) cb.checked = !!prefs[k];
-        });
-        document.getElementById('notifDigestFreq').value = prefs.digest_frequency || 'realtime';
-        document.getElementById('notif-error').style.display = 'none';
-        document.getElementById('notif-success').style.display = 'none';
-        notifPrefsModal.showModal();
-    } catch (err) { alert('Failed to load notification preferences: ' + err.message); }
-});
-document.getElementById('notifPrefsClose').addEventListener('click', () => notifPrefsModal.close());
-document.getElementById('notifPrefsCancelBtn').addEventListener('click', () => notifPrefsModal.close());
-document.getElementById('notifPrefsSaveBtn').addEventListener('click', async () => {
-    const form = document.getElementById('notifPrefsForm');
-    const payload = {};
-    ['card_created','card_updated','card_assigned','card_moved','card_due_reminder','comment_added','digest_enabled'].forEach(k => {
-        payload[k] = form.querySelector(`[name="${k}"]`).checked;
-    });
-    payload.digest_frequency = document.getElementById('notifDigestFreq').value;
-    try {
-        document.getElementById('notif-error').style.display = 'none';
-        const prefs = await api('PUT', '/api/cards/notification-prefs', payload);
-        if (!prefs) return;
-        document.getElementById('notif-success').textContent = 'Preferences saved!';
-        document.getElementById('notif-success').style.display = 'block';
-        setTimeout(() => notifPrefsModal.close(), 1500);
-    } catch (err) {
-        document.getElementById('notif-error').textContent = err.message;
-        document.getElementById('notif-error').style.display = 'block';
-    }
-});
-
-// ============================================================================
-// Admin Nav Visibility
-// ============================================================================
-document.getElementById('adminDashboardLink').addEventListener('click', () => {
-    window.location.href = '/analytics.html';
-});
-document.getElementById('adminWebhooksLink').addEventListener('click', () => {
-    window.location.href = '/admin.html#webhooks';
-});
 </script>
 </body>
 </html>
