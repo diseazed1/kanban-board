@@ -167,7 +167,13 @@ router.get('/', async (req, res) => {
 
         const query = `
             SELECT DISTINCT c.*, o.username AS owner_username, a.username AS assignee_username,
-                    CASE WHEN c.due_date IS NOT NULL AND c.due_date < NOW() THEN true ELSE false END AS is_overdue
+                    CASE WHEN c.due_date IS NOT NULL AND c.due_date < NOW() THEN true ELSE false END AS is_overdue,
+                    COALESCE((
+                        SELECT json_agg(ct.name) 
+                        FROM card_tag_map ctm 
+                        INNER JOIN card_tags ct ON ct.id = ctm.tag_id 
+                        WHERE ctm.card_id = c.id
+                    ), '[]') AS tags
             FROM cards c
             LEFT JOIN users o ON o.id = c.owner_id
             LEFT JOIN users a ON a.id = c.assignee_id

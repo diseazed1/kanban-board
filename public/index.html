@@ -154,6 +154,21 @@
             display: flex; justify-content: space-between; align-items: center;
             flex-wrap: wrap; gap: 0.2rem;
         }
+
+        /* ------------------------------------------------------------------ */
+        /* Tags on cards (board view)                                         */
+        /* ------------------------------------------------------------------ */
+        .card-tags {
+            display: flex; flex-wrap: wrap; gap: 0.25rem;
+            margin-top: 0.4rem; padding-top: 0.4rem;
+            border-top: 1px solid #eee;
+        }
+        .card-tag-badge {
+            display: inline-block; font-size: 0.65rem;
+            background: #e8f4fd; color: #2980b9;
+            padding: 0.1rem 0.4rem; border-radius: 10px;
+            font-weight: 600;
+        }
         .card-priority-tag {
             display: inline-block; font-size: 0.65rem; font-weight: 700;
             text-transform: uppercase; padding: 0.1rem 0.4rem;
@@ -825,6 +840,10 @@ function renderCard(card, visible) {
             <button class="btn btn-danger btn-sm card-delete-btn" data-card-id="${card.id}">Delete</button>
             ` : ''}
         </div>
+        ${card.tags && card.tags.length > 0 ? `
+        <div class="card-tags">
+            ${(Array.isArray(card.tags) ? card.tags : []).map(t => `<span class="card-tag-badge">${escapeHtml(t)}</span>`).join('')}
+        </div>` : ''}
     </div>`;
 }
 
