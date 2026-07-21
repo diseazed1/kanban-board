@@ -376,6 +376,7 @@
         <button id="bulkMoveBtn" class="btn">Move</button>
         <input type="text" id="bulkAssignInput" placeholder="Assign to..." style="padding:0.3rem 0.5rem;font-size:0.8rem;border-radius:4px;border:none;">
         <button id="bulkAssignBtn" class="btn">Assign</button>
+        <button id="bulkClearAssignBtn" class="btn">Clear Assignee</button>
         <button id="bulkDeleteBtn" class="btn">Delete All</button>
     </div>
 
@@ -461,6 +462,24 @@
             <div class="comment-form">
                 <textarea id="newCommentBody" placeholder="Add a comment..."></textarea>
                 <button class="btn btn-primary btn-sm" id="postCommentBtn" style="align-self:flex-end;padding:0.4rem 0.8rem;">Post</button>
+            </div>
+        </div>
+
+        <div class="detail-section">
+            <h3>Subtasks</h3>
+            <ul class="subtask-list" id="subtaskList" style="list-style:none;padding:0;"></ul>
+            <div class="comment-form">
+                <input type="text" id="newSubtaskTitle" placeholder="Add a subtask..." style="flex:1;padding:0.4rem 0.6rem;border-radius:4px;border:1px solid #ddd;font-size:0.85rem;">
+                <button class="btn btn-primary btn-sm" id="addSubtaskBtn" style="align-self:flex-end;padding:0.4rem 0.8rem;">Add</button>
+            </div>
+        </div>
+
+        <div class="detail-section">
+            <h3>Tags</h3>
+            <div id="cardTagsContainer" style="display:flex;flex-wrap:wrap;gap:0.4rem;margin-bottom:0.5rem;"></div>
+            <div class="comment-form">
+                <input type="text" id="newTagInput" placeholder="Add tag..." style="flex:1;padding:0.4rem 0.6rem;border-radius:4px;border:1px solid #ddd;font-size:0.85rem;">
+                <button class="btn btn-primary btn-sm" id="addTagBtn" style="align-self:flex-end;padding:0.4rem 0.8rem;">Add</button>
             </div>
         </div>
 
@@ -937,14 +956,18 @@ async function openDetailModal(cardId) {
             ${card.assignee_username ? ` | Assigned to: <strong>${escapeHtml(card.assignee_username)}</strong>` : ''}
         </p>`;
 
-    // Load comments and activity in parallel
-    const [comments, activity] = await Promise.all([
+    // Load comments, activity, subtasks, and tags in parallel
+    const [comments, activity, subtasks, cardTags] = await Promise.all([
         api('GET', `/api/cards/${cardId}/comments`).catch(() => []),
         api('GET', `/api/cards/${cardId}/activity`).catch(() => []),
+        api('GET', `/api/cards/${cardId}/subtasks`).catch(() => []),
+        api('GET', `/api/cards/${cardId}/tags`).catch(() => []),
     ]);
 
     renderComments(comments || []);
     renderActivity(activity || []);
+    renderSubtasks(subtasks || []);
+    renderCardTags(cardTags || []);
 
     detailModal.showModal();
 }
@@ -1004,6 +1027,109 @@ function formatTime(iso) {
     const d = new Date(iso);
     return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
+
+// ============================================================================
+// Subtasks
+// ============================================================================
+function renderSubtasks(subtasks) {
+    const list = document.getElementById('subtaskList');
+    if (!list) return;
+    if (subtasks.length === 0) {
+        list.innerHTML = '<li style="font-size:0.8rem;color:#999;padding:0.25rem 0;">No subtasks yet.</li>';
+        return;
+    }
+    list.innerHTML = subtasks.map(st => `
+        <li style="padding:0.3rem 0;display:flex;align-items:center;gap:0.4rem;border-bottom:1px solid #eee;">
+            <input type="checkbox" class="subtask-check" data-subtask-id="${st.id}" ${st.completed ? 'checked' : ''} style="cursor:pointer;width:auto;">
+            <span style="flex:1;font-size:0.85rem;${st.completed ? 'text-decoration;line-through;color:#999;' : ''}">${escapeHtml(st.title)}</span>
+            <button class="btn btn-sm subtask-delete-btn" data-subtask-id="${st.id}" style="padding:0.2rem 0.5rem;font-size:0.7rem;background:#e74c3c;color:white;border:none;border-radius:3px;cursor:pointer;">&times;</button>
+        </li>`).join('');
+}
+
+// Add subtask handler
+document.getElementById('addSubtaskBtn').addEventListener('click', async () => {
+    const input = document.getElementById('newSubtaskTitle');
+    const title = input.value.trim();
+    if (!title || !detailCardId) return;
+    try {
+        await api('POST', `/api/cards/${detailCardId}/subtasks`, { title });
+        input.value = '';
+        const subtasks = await api('GET', `/api/cards/${detailCardId}/subtasks`).catch(() => []);
+        renderSubtasks(subtasks || []);
+    } catch (err) { alert(`Add subtask failed: ${err.message}`); }
+});
+
+// Toggle subtask completion
+document.getElementById('subtaskList').addEventListener('change', async (e) => {
+    const check = e.target.closest('.subtask-check');
+    if (!check || !detailCardId) return;
+    const subtaskId = parseInt(check.dataset.subtaskId, 10);
+    const completed = check.checked;
+    try {
+        await api('PUT', `/api/cards/${detailCardId}/subtasks/${subtaskId}`, { completed });
+        // Re-render without reloading everything
+        renderSubtasks((await api('GET', `/api/cards/${detailCardId}/subtasks`).catch(() => [])) || []);
+    } catch (err) { alert(`Toggle subtask failed: ${err.message}`); }
+});
+
+// Delete subtask
+document.getElementById('subtaskList').addEventListener('click', async (e) => {
+    const delBtn = e.target.closest('.subtask-delete-btn');
+    if (!delBtn || !detailCardId) return;
+    const subtaskId = parseInt(delBtn.dataset.subtaskId, 10);
+    try {
+        await api('DELETE', `/api/cards/${detailCardId}/subtasks/${subtaskId}`);
+        renderSubtasks((await api('GET', `/api/cards/${detailCardId}/subtasks`).catch(() => [])) || []);
+    } catch (err) { alert(`Delete subtask failed: ${err.message}`); }
+});
+
+// ============================================================================
+// Card Tags
+// ============================================================================
+function renderCardTags(tags) {
+    const container = document.getElementById('cardTagsContainer');
+    if (!container) return;
+    if (tags.length === 0) {
+        container.innerHTML = '<span style="font-size:0.8rem;color:#999;">No tags.</span>';
+        return;
+    }
+    container.innerHTML = tags.map(tag => `
+        <span class="tag-badge" data-tag-id="${tag.id}" style="display:inline-flex;align-items:center;gap:0.25rem;padding:0.2rem 0.5rem;background:#e8f4fd;color:#2980b9;border-radius:12px;font-size:0.75rem;cursor:pointer;">
+            ${escapeHtml(tag.name)}
+            <span class="tag-remove-btn" data-tag-id="${tag.id}" style="font-weight:bold;margin-left:0.15rem;">&times;</span>
+        </span>`).join('');
+}
+
+// Add tag handler
+document.getElementById('addTagBtn').addEventListener('click', async () => {
+    const input = document.getElementById('newTagInput');
+    const name = input.value.trim();
+    if (!name || !detailCardId) return;
+    try {
+        await api('POST', `/api/cards/${detailCardId}/tags`, { tag_name: name });
+        input.value = '';
+        renderCardTags((await api('GET', `/api/cards/${detailCardId}/tags`).catch(() => [])) || []);
+    } catch (err) { alert(`Add tag failed: ${err.message}`); }
+});
+
+// Remove tag handler
+document.getElementById('cardTagsContainer').addEventListener('click', async (e) => {
+    const removeBtn = e.target.closest('.tag-remove-btn');
+    if (!removeBtn || !detailCardId) return;
+    e.stopPropagation();
+    const tagId = parseInt(removeBtn.dataset.tagId, 10);
+    try {
+        await api('DELETE', `/api/cards/${detailCardId}/tags/${tagId}`);
+        renderCardTags((await api('GET', `/api/cards/${detailCardId}/tags`).catch(() => [])) || []);
+    } catch (err) { alert(`Remove tag failed: ${err.message}`); }
+});
+
+// Click on a tag badge to filter the board by that tag
+addEventListener('click', async (e) => {
+    const tagBadge = e.target.closest('.tag-badge:not(.tag-remove-btn)');
+    if (!tagBadge || !detailCardId) return;
+    // Could add filtering logic here in future; for now just visual feedback
+});
 
 // Post comment
 document.getElementById('postCommentBtn').addEventListener('click', async () => {
@@ -1077,6 +1203,16 @@ document.getElementById('bulkAssignBtn').addEventListener('click', async () => {
         bulkSelected.clear(); await loadBoard();
     } catch (err) { alert(`Bulk assign failed: ${err.message}`); }
 });
+
+// Bulk Clear Assignee
+document.getElementById('bulkClearAssignBtn').addEventListener('click', async () => {
+    if (!confirm(`Clear assignee from ${bulkSelected.size} selected cards?`)) return;
+    try {
+        await api('PATCH', '/api/cards/bulk/assign', { card_ids: [...bulkSelected], assignee_id: null });
+        bulkSelected.clear(); await loadBoard();
+    } catch (err) { alert(`Bulk clear failed: ${err.message}`); }
+});
+
 document.getElementById('bulkDeleteBtn').addEventListener('click', async () => {
     if (!confirm(`Delete ${bulkSelected.size} selected cards?`)) return;
     try {
